@@ -3,7 +3,7 @@
 // triangle features (vertex-face and edge-edge), with persistent tangential springs.
 export const defaults3d={
  strips:22,length:3.2,width:.9,cols:7,rows:3,box:7,bending:14,
- friction:.75,K:.5,tau:2.5,dt:.002,seed:17,
+ friction:.75,K:.5,tau:2.5,dt:.003,seed:17,packing:true,packingSteps:420,
  spring:280,normalStiffness:650,normalDamp:10,tangentialStiffness:110,
  tangentialDamp:1.5,drag:7,thickness:.16
 };
@@ -135,34 +135,64 @@ export function periodicProximity(s,a,b){
  const shifted=B.map(v=>add(v,shift));
  return triangleProximity(A,shifted);
 }
+// Rejection sampling at the requested dense box can silently omit objects.
+// Instead, insert all strips at dilute packing, then contract the periodic cell
+// by translating strip centers (without scaling their internal mesh).
 export function init3d(options={}){
- const p={...defaults3d,...options},rng=seededRandom(p.seed),L=p.box;
- const s={p,t:0,vertices:[],triangles:[],springs:[],bends:[],strips:[],memory:new Map(),pairAges:new Map(),completed:[],links:new Set(),maxOverlap:0,contacts:0,placementFailed:0};
- for(let i=0;i<p.strips;i++){
-  let placed=false;
-  for(let trial=0;trial<130;trial++){
-   const center=[rng()*L,rng()*L,rng()*L],frame=randomFrame(rng);
-   const nv=s.vertices.length,nt=s.triangles.length,ns=s.springs.length,nb=s.bends.length;
-   makeStrip(s,i,center,frame);
-   let overlap=false;
-   const fresh=s.triangles.slice(nt);
-   for(const a of fresh){if(overlap)break;const P=triPoints(s,a),ca=center3(P),ra=radius3(P,ca);
-    for(let j=0;j<nt;j++){const b=s.triangles[j],Q=triPoints(s,b),cb=center3(Q),rb=radius3(Q,cb);
-     const dist=Math.hypot(...ca.map((x,k)=>x-cb[k]-Math.round((x-cb[k])/L)*L));
-     if(dist>ra+rb+p.thickness*1.15)continue;
-     if(periodicProximity(s,a,b).distance<p.thickness*1.15){overlap=true;break;}
+ const p={...defaults3d,...options},target=p.box,packed=p.packing!==false&&p.packingSteps>0;
+ const occupiedVolume=p.strips*p.length*p.width*p.thickness;
+ let initial=packed?Math.max(target*1.18,(occupiedVolume/.033)**(1/3)):target;
+ for(let retry=0;retry<5;retry++){
+  p.box=initial;
+  const rng=seededRandom(p.seed+1013*retry),L=p.box;
+  const s={p,t:0,vertices:[],triangles:[],springs:[],bends:[],strips:[],
+   memory:new Map(),pairAges:new Map(),completed:[],links:new Set(),
+   maxOverlap:0,contacts:0,placementFailed:0,
+   preparing:packed&&initial>target+1e-10,prepStep:0,prepSteps:p.packingSteps,
+   prepStartBox:initial,prepTargetBox:target,prepElapsed:0,prepMaxOverlap:0};
+  let success=true;
+  for(let i=0;i<p.strips;i++){
+   let placed=false;
+   for(let trial=0;trial<210;trial++){
+    const center=[rng()*L,rng()*L,rng()*L],frame=randomFrame(rng);
+    const nv=s.vertices.length,nt=s.triangles.length,ns=s.springs.length,nb=s.bends.length;
+    makeStrip(s,i,center,frame);
+    let overlap=false;
+    const fresh=s.triangles.slice(nt);
+    for(const face of fresh){
+     if(overlap)break;
+     const P=triPoints(s,face),ca=center3(P),ra=radius3(P,ca);
+     for(let j=0;j<nt;j++){
+      const older=s.triangles[j],Q=triPoints(s,older),cb=center3(Q),rb=radius3(Q,cb);
+      const dist=Math.hypot(...ca.map((x,k)=>x-cb[k]-Math.round((x-cb[k])/L)*L));
+      if(dist>ra+rb+p.thickness*1.12)continue;
+      if(periodicProximity(s,face,older).distance<p.thickness*1.12){overlap=true;break;}
+     }
     }
+    if(!overlap){placed=true;break;}
+    s.vertices.length=nv;s.triangles.length=nt;s.springs.length=ns;
+    s.bends.length=nb;s.strips.length=i;
    }
-   if(!overlap){placed=true;break;}
-   s.vertices.length=nv;s.triangles.length=nt;s.springs.length=ns;s.bends.length=nb;s.strips.length=i;
+   if(!placed){success=false;break;}
   }
-  if(!placed){s.placementFailed=p.strips-i;break;}
+  if(success)return s;
+  if(!packed)throw new Error('Failed to place all requested strips without overlap; enable packing or increase box size.');
+  initial*=1.3;
  }
- return s;
+ throw new Error('Unable to initialize requested strips even after expanding the dilute box.');
 }
-// Dynamic periodic triangle-AABB hash broad phase. A triangle is placed
-// in every cell its thickness-expanded bounding box intersects, making this
-// valid even when its mesh is deformed or spans a periodic seam.
+// One quasi-static packing increment. Compression changes the centers of the
+// strips but does not change edge rest lengths or scale any individual strip.
+function compressCenters(s){
+ const oldBox=s.p.box,u=(s.prepStep+1)/s.prepSteps,ease=u*u*(3-2*u);
+ const newBox=s.prepStartBox*Math.pow(s.prepTargetBox/s.prepStartBox,ease),ratio=newBox/oldBox;
+ for(const strip of s.strips){
+  const c=[0,0,0];
+  for(const id of strip.ids)for(let k=0;k<3;k++)c[k]+=s.vertices[id].p[k]/strip.ids.length;
+  for(const id of strip.ids)for(let k=0;k<3;k++)s.vertices[id].p[k]+=c[k]*(ratio-1);
+ }
+ s.p.box=newBox;s.prepStep++;
+}
 function collisionCandidates(s){
  const {triangles,vertices,p}=s,L=p.box;
  const n=Math.max(2,Math.min(14,Math.floor(L/1.1))),cell=L/n,half=p.thickness/2;
@@ -274,7 +304,12 @@ function recenterStrips(s){
 export function step3d(s,n=1){
  const{p,vertices}=s;
  for(let step=0;step<n;step++){
-  for(const a of vertices){const u=drive3d(a.p,s.t,p);for(let k=0;k<3;k++)a.f[k]=p.drag*a.m*(u[k]-a.v[k]);}
+  const packing=s.preparing;
+  if(packing)compressCenters(s);
+  for(const a of vertices){
+   const u=packing?[0,0,0]:drive3d(a.p,s.t,p);
+   for(let k=0;k<3;k++)a.f[k]=p.drag*a.m*(u[k]-a.v[k]);
+  }
   applyElastic(s);
   s.contacts=0;s.maxOverlap=0;s.links=new Set();
   const active=new Set();
@@ -289,7 +324,18 @@ export function step3d(s,n=1){
    a.v[k]=clamp(a.v[k]+p.dt*a.f[k]/a.m,-8,8);
    a.p[k]+=p.dt*a.v[k];
   }
-  recenterStrips(s);s.t+=p.dt;
+  recenterStrips(s);
+  if(packing){
+   s.prepElapsed+=p.dt;
+   s.prepMaxOverlap=Math.max(s.prepMaxOverlap,s.maxOverlap);
+   if(s.prepStep>=s.prepSteps){
+    s.p.box=s.prepTargetBox;s.preparing=false;
+    // Preserve actual contact forces/history, but start lifetime statistics
+    // and the stirring-time axis at the prepared state.
+    s.pairAges=new Map([...s.links].map(key=>[key,0]));
+    s.completed=[];
+   }
+  }else s.t+=p.dt;
  }
  return s;
 }
@@ -341,6 +387,6 @@ export function coherence3d(s,component=cluster3d(s).component){
 }
 export function diagnostics3d(s){
  const c=cluster3d(s),avgFinished=s.completed.length?s.completed.reduce((a,b)=>a+b,0)/s.completed.length:0;
- return{t:s.t,fraction:c.fraction,edges:c.edges,degree:c.degree,meanAge:c.meanAge,
+ return{t:s.t,preparing:s.preparing,prepProgress:s.preparing?s.prepStep/s.prepSteps:1,box:s.p.box,targetBox:s.prepTargetBox,prepMaxOverlap:s.prepMaxOverlap,fraction:c.fraction,edges:c.edges,degree:c.degree,meanAge:c.meanAge,
  completedAge:avgFinished,coherence:coherence3d(s,c.component),maxOverlap:s.maxOverlap,contacts:s.contacts,strips:s.strips.length};
 }
