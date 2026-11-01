@@ -4,8 +4,8 @@
 export const defaults3d={
  strips:64,length:3.5,width:1.2,cols:5,rows:2,box:6.3,bending:14,
  friction:.75,K:.5,tau:2.5,dt:.003,seed:17,packing:true,packingSteps:420,relaxSteps:240,
- spring:280,normalStiffness:650,normalDamp:10,tangentialStiffness:110,
- tangentialDamp:1.5,drag:7,thickness:.16
+ spring:280,normalStiffness:3200,normalDamp:35,tangentialStiffness:110,
+ tangentialDamp:1.5,drag:9,thickness:.16
 };
 const pi=Math.PI;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
