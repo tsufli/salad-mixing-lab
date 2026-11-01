@@ -1,26 +1,54 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Salad Mixing Lab</title><style>
-:root{font-family:system-ui,sans-serif;color:#e7eef7;background:#0d1421}body{margin:0}main{max-width:1150px;margin:auto;padding:24px}h1{margin-bottom:6px}p{color:#aabbd0}.layout{display:grid;grid-template-columns:minmax(0,1fr) 255px;gap:20px}@media(max-width:750px){.layout{grid-template-columns:1fr}}canvas{width:100%;height:auto;background:#152237;border:1px solid #40516a;border-radius:12px}aside{background:#19263a;border-radius:12px;padding:16px}label{display:block;margin:12px 0;font-size:14px}input,select{width:100%}select{padding:7px;background:#24374f;color:#e7eef7;border:1px solid #586d82;border-radius:5px}.theory{background:#19263a;border:1px solid #40516a;border-radius:12px;padding:18px;margin:20px 0}.theory h2{margin-top:0}.theory h3{margin-bottom:7px}.equation{white-space:pre-wrap;overflow-wrap:anywhere;background:#101c2d;border-radius:8px;padding:10px;color:#c8f2da;font-size:13px}.theory p{line-height:1.55}button{background:#70b99c;border:0;border-radius:8px;padding:10px 15px;margin:5px 4px 5px 0;font-weight:700;cursor:pointer}.stats{display:flex;gap:25px;flex-wrap:wrap;margin:12px 0;color:#b6d9e5}.hint{font-size:13px}code{color:#9cd6bc}</style></head><body><main><h1>Salad Mixing Lab</h1><p>Long-time rod–disk statistics under alternating sine flow in a larger 18 × 12 periodic box.</p><div class="layout"><section><canvas id="scene" width="840" height="560"></canvas><section class="theory"><h2>Model and equations of motion</h2>
+:root{font-family:system-ui,sans-serif;color:#e7eef7;background:#0d1421}body{margin:0}main{max-width:1150px;margin:auto;padding:24px}h1{margin-bottom:6px}p{color:#aabbd0}.layout{display:grid;grid-template-columns:minmax(0,1fr) 255px;gap:20px}@media(max-width:750px){.layout{grid-template-columns:1fr}}canvas{width:100%;height:auto;background:#152237;border:1px solid #40516a;border-radius:12px}aside{background:#19263a;border-radius:12px;padding:16px}label{display:block;margin:12px 0;font-size:14px}input,select{width:100%}select{padding:7px;background:#24374f;color:#e7eef7;border:1px solid #586d82;border-radius:5px}.theory{background:#19263a;border:1px solid #40516a;border-radius:12px;padding:18px;margin:20px 0}.theory h2{margin-top:0}.theory h3{margin-bottom:7px}.math-display{overflow-x:auto;padding:10px 4px;margin:12px 0 18px;color:#eff6fc;font-size:17px;line-height:1.5}.math-display mjx-container[display="true"]{margin:0.5em 0!important}.theory{max-width:100%;overflow:hidden}.theory p{line-height:1.55}button{background:#70b99c;border:0;border-radius:8px;padding:10px 15px;margin:5px 4px 5px 0;font-weight:700;cursor:pointer}.stats{display:flex;gap:25px;flex-wrap:wrap;margin:12px 0;color:#b6d9e5}.hint{font-size:13px}code{color:#9cd6bc}</style><script>window.MathJax={tex:{displayMath:[['\\[','\\]']],inlineMath:[['\\(','\\)']]},options:{skipHtmlTags:['script','noscript','style','textarea','pre','code']}};</script><script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script></head><body><main><h1>Salad Mixing Lab</h1><p>Long-time rod–disk statistics under alternating sine flow in a larger 18 × 12 periodic box.</p><div class="layout"><section><canvas id="scene" width="840" height="560"></canvas><section class="theory"><h2>Model and equations of motion</h2>
 <p>This is a <strong>dimensionless, two-dimensional discrete-element model</strong>, not a Navier–Stokes solver. The rods are rigid spherocylinders (capsules), and the lentils are disks. All particles have finite mass, translation and rotation. The external stirring is a prescribed background velocity field; particle contacts can cause deviations from it.</p>
 <h3>Prescribed alternating sine flow</h3>
-<pre class="equation">0 ≤ t mod (2τ) &lt; τ:       u(x,y,t) = (WK/τ · sin(2πy/H), 0)
-τ ≤ t mod (2τ) &lt; 2τ:    u(x,y,t) = (0, HK/τ · sin(2πx/W))</pre>
+<div class="math-display">\[
+\mathbf u(\mathbf r,t)=
+\begin{cases}
+\left(\dfrac{WK}{\tau}\sin\dfrac{2\pi y}{H},\,0\right),
+& 0\le t\bmod 2\tau<\tau,\\[6pt]
+\left(0,\,\dfrac{HK}{\tau}\sin\dfrac{2\pi x}{W}\right),
+& \tau\le t\bmod 2\tau<2\tau .
+\end{cases}
+\]</div>
 <p>The box has dimensions W = 18, H = 12 and periodic boundaries. Each half-cycle lasts τ = 2.5 simulation time units. The slider K sets the dimensionless shear displacement. The imposed field is incompressible. Coordinates wrap at opposite boundaries, and particles interact across periodic seams.</p>
 <h3>Translational motion</h3>
-<pre class="equation">mᵢ d²rᵢ/dt² = Σⱼ Fᵢⱼ(contact) + γₜ mᵢ [u(rᵢ,t) − vᵢ]</pre>
+<div class="math-display">\[
+m_i\ddot{\mathbf r}_i
+=\sum_{j\ne i}\mathbf F_{ij}^{\mathrm{contact}}
++\gamma_t m_i\bigl[\mathbf u(\mathbf r_i,t)-\dot{\mathbf r}_i\bigr].
+\]</div>
 <p>The first term sums collisions with <em>both species</em> (rod–rod, disk–disk and rod–disk). The second term relaxes each particle velocity toward the local stirring velocity. In the implementation γₜ = 7, so this is a finite-response model, not tracer advection. No gravity or fluid-mediated interparticle forces are included.</p>
 <h3>Rotation of the rods</h3>
-<pre class="equation">Iᵢ dωᵢ/dt = Σⱼ τᵢⱼ(contact) + γₜ Iᵢ [Ωᵢ,drive − ωᵢ]
-Ωᵢ,drive = { [u(rᵢ+ℓeᵢ/2) − u(rᵢ−ℓeᵢ/2)] · eᵢ⊥ } / ℓ</pre>
+<div class="math-display">\[
+I_i\dot{\omega}_i=\sum_{j\ne i}\tau_{ij}^{\mathrm{contact}}
++\gamma_t I_i\left(\Omega_{i,\mathrm{drive}}-\omega_i\right)
+\]
+\[
+\Omega_{i,\mathrm{drive}}=
+\frac{\left[\mathbf u(\mathbf r_i+\frac{\ell_i}{2}\mathbf e_i,t)
+-\mathbf u(\mathbf r_i-\frac{\ell_i}{2}\mathbf e_i,t)\right]\cdot\mathbf e_i^\perp}{\ell_i}.
+\]</div>
 <p>Here eᵢ = (cos θᵢ, sin θᵢ) points along the rod and eᵢ⊥ = (−sin θᵢ, cos θᵢ). This finite-difference approximation drives rod rotation toward the local flow-induced angular velocity. Contact forces also exert torques through their lever arms.</p>
 <h3>Contact law</h3>
-<pre class="equation">δᵢⱼ = (radiusᵢ + radiusⱼ) − dᵢⱼ
-Fₙ = max(0, kₙ δᵢⱼ − ηₙ vₙ) n̂       (only when δᵢⱼ &gt; 0)
-Fₜ = −μ |Fₙ| tanh(vₜ / v₀) t̂
-τᵢⱼ = (rcontact − rᵢ) × Fᵢⱼ</pre>
+<div class="math-display">\[
+\begin{aligned}
+\delta_{ij}&=a_i+a_j-d_{ij},\\
+\mathbf F_n&=\max\!\left(0,k_n\delta_{ij}-\eta_n v_n\right)\hat{\mathbf n},
+\qquad(\delta_{ij}>0),\\
+\mathbf F_t&=-\mu\,|\mathbf F_n|\tanh\!\left(\frac{v_t}{v_0}\right)\hat{\mathbf t},\\
+\tau_{ij}&=(\mathbf r_{\mathrm{contact}}-\mathbf r_i)\times\mathbf F_{ij}.
+\end{aligned}
+\]</div>
 <p>For rods, dᵢⱼ is computed between their centerline segments (or between a segment and disk center), using the nearest periodic image. Parameters are kₙ = 900, ηₙ = 13 and v₀ = 0.06. This is <strong>regularized sliding friction</strong>, without history-dependent static friction or permanent binding. Contacts are instantaneous and may appear or disappear during stirring.</p>
 <h3>Relation to the exact tracer map</h3>
-<pre class="equation">X' = [X + K sin(2πY)] mod 1
-Y' = [Y + K sin(2πX')] mod 1,   X = x/W, Y = y/H</pre>
+<div class="math-display">\[
+\begin{aligned}
+X_{n+1}&=\left[X_n+K\sin(2\pi Y_n)\right]\bmod 1,\\
+Y_{n+1}&=\left[Y_n+K\sin(2\pi X_{n+1})\right]\bmod 1,\\
+X&=\frac{x}{W},\qquad Y=\frac{y}{H}.
+\end{aligned}
+\]</div>
 <p>This exact area-preserving map holds for <strong>ideal passive tracers</strong> observed once per full cycle. Our rods and disks do <em>not</em> follow it exactly: finite inertia, velocity relaxation and mutual contact forces change their paths. The simulation integrates their equations explicitly with time step Δt = 0.003; velocities are capped as a numerical safeguard.</p>
 </section><h2>Observables</h2><div class="stats"><span id="clock"></span><span id="mix"></span><span id="contacts"></span></div><canvas id="chart" width="840" height="190"></canvas><h3>Time-averaged disk structure factor S<sub>dd</sub>(k)</h3><canvas id="sfchart" width="840" height="190"></canvas><p id="averageStatus" class="hint">Averaging starts after t = 10.</p><p class="hint">The mixing metric is the normalized variance of disk counts in a 4 × 3 spatial grid. For a finite number of randomly distributed disks, it fluctuates above zero. Disk–rod, rod–rod, and disk–disk contacts are enabled.</p></section><aside><button id="run">Pause</button><button id="reset">New run</button><button id="repeat">Restart same seed</button><label>Disk initialization<select id="initial"><option value="uniform">Uniform (long-time)</option><option value="left">Left half (mixing)</option></select></label><label>Rod count <output id="rodsOut"></output><input id="rods" type="range" min="0" max="70" value="36"></label><label>Disk count <output id="disksOut"></output><input id="disks" type="range" min="15" max="400" value="220"></label><label>Rod aspect ratio <output id="aspectOut"></output><input id="aspect" type="range" min="2" max="9" step="1" value="6"></label><label>Friction coefficient <output id="frictionOut"></output><input id="friction" type="range" min="0" max="1" step="0.05" value="0.55"></label><label>Shear displacement K <output id="KOut"></output><input id="K" type="range" min="0" max="1.5" step="0.05" value="0.7"></label><p class="hint">Each half-period lasts 2.5 time units. In normalized coordinates, passive tracers obey <code>X' = X + K sin(2πY)</code>, then <code>Y' = Y + K sin(2πX')</code>, modulo 1.</p><p class="hint">The rods/disks have inertia, contacts and drag: their trajectories are <em>not</em> exactly this tracer map. Changes take effect on the next run. Use Restart same seed to compare friction.</p><label>Simulation speed<select id="speed"><option value="5">Normal</option><option value="15" selected>Fast</option><option value="30">Very fast</option></select></label><button id="export">Export data CSV</button></aside></div></main><script type="module">
 import {init,step,mixing,clusterStats,structureFactor} from './physics.mjs';const $=id=>document.getElementById(id),c=$('scene'),ctx=c.getContext('2d'),chart=$('chart'),g=chart.getContext('2d');let seed=17,currentSeed=17,sim,playing=true,history=[],sfAccum=[],sfCount=0,nextSample=0;
