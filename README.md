@@ -4,6 +4,10 @@ Interactive 2D periodic simulation of small disks and **flexible fibers**, drive
 
 **Live website:** https://tsufli.github.io/salad-mixing-lab/
 
+**3D flexible strips:** https://tsufli.github.io/salad-mixing-lab/strips3d.html
+
+The website now has two tabs: the original 2D flexible-fiber / disk experiment and a new 3D strip-only model.
+
 ## Physical model
 
 Each of the default 30 fibers is a five-node bead chain (total 150 nodes) with nearest-neighbor stretching stiffness `ks=400` and bending energy
@@ -49,3 +53,24 @@ The GitHub Pages workflow publishes on pushes to main.
 ## Scope and limitations
 
 This is a **2D flexible bead-chain** model rather than a 3D triangulated flexible sheet model, so it cannot model overlapping leaves or genuine three-dimensional topological interlocking. It uses an imposed flow instead of coupled fluid dynamics. It has not been physically calibrated, validated against experimental mixing rates, or checked systematically for time-step and size convergence. Its numerical stability does not establish predictive realism.
+
+
+## 3D triangulated-strip experiment
+
+Open `strips3d.html` in the published site. The code is in `strips3d.mjs` (3D physics) and `strips3d-worker.mjs` (background simulation worker). The original 2D model is retained independently.
+
+**Scope:** A periodic cube with deformable finite-width triangulated strip surfaces, no lentils, gravity, adhesive links or fluid back-reaction. Each strip has a fixed 7 × 3 vertex grid. Springs on longitudinal, transverse and diagonal mesh edges penalize in-plane stretch/shear. Longitudinal/transverse second differences and mixed differences approximate bending and twist. These are *discrete mesh energies*, not an exact thin-shell constitutive law.
+
+**Drive:** Three successive incompressible sine shears, x depending on y, y depending on z, z depending on x. One phase lasts τ=2.5. Control parameters are strip number and size, periodic box length (density), bending penalty, friction and shear displacement K.
+
+**Contact:** Pairwise distances between triangle surfaces use vertex-face, edge-edge and edge-through-face intersection tests with periodic images. Normal penalty contact and history-dependent Coulomb-limited tangential springs distribute forces to triangle vertices using barycentric weights. Nonlocal self-contact is included. A spatial hash and per-triangle bounding-box filter accelerate candidate discovery. Temporary tangential memory is tracked per triangle pair; continuous inter-strip contact lifetime is tracked per strip pair. The code does *not* implement continuous collision detection or exact nonpenetration; numerical crossing remains possible.
+
+**Measurements:** Largest connected component fraction; number and mean age of inter-strip contact links; mean duration of ended contact links; and a velocity coherence diagnostic after subtracting translation and best-fit angular velocity. Coherence is undefined for clusters of fewer than three strips. Neither connectivity nor coherence by itself proves true topological entanglement or material rigidity.
+
+**Performance:** The physics runs in a Web Worker; the main thread remains responsive to camera orbit/zoom. The solver is intentionally a coarse 3D prototype and can be computationally expensive. Parameter and mesh convergence must be established before interpreting any apparent transition.
+
+Run all repository tests:
+
+```bash
+node --test tests/*.test.mjs
+```
