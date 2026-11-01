@@ -39,7 +39,7 @@ button:hover{filter:brightness(1.07)}
 <a href="./strips3d.html" aria-current="page">3D flexible strips</a>
 </nav>
 <h1>3D Flexible Strip Network</h1>
-<p>Nonadhesive triangulated strips in a periodic 3D box. Explore whether geometric contact, bending and static friction produce a long-lived collective network under three alternating shears.</p>
+<p>Explore dense assemblies of nonadhesive 3D elastic strips. Prepare a packing, let it relax without stirring, then test whether the resulting contact network moves coherently under alternating shear.</p>
 <div class="layout"><section>
 <canvas id="scene" width="960" height="650" aria-label="3D perspective rendering of flexible strips"></canvas>
 <div class="toolbar"><button id="view" class="secondary">Reset view</button><span class="hint">Drag to orbit · scroll or pinch to zoom · translucent faces show over-and-under geometry</span></div>
@@ -48,13 +48,16 @@ button:hover{filter:brightness(1.07)}
 <div class="stat"><b id="time">0.00</b><small>Stirring time</small></div>
 <div class="stat"><b id="cluster">—</b><small>Largest contact cluster</small></div>
 <div class="stat"><b id="links">0</b><small>Inter-strip contact links</small></div>
-<div class="stat"><b id="density">—</b><small>Estimated volume fraction</small></div>
+<div class="stat"><b id="density">—</b><small>Effective volume fraction</small></div>
+<div class="stat"><b id="penetration">—</b><small>Maximum overlap / thickness</small></div>
+<div class="stat"><b id="throughput">—</b><small>Solver steps / second</small></div>
 <div class="stat"><b id="coherence">—</b><small>Rigid-like motion score</small></div>
 </div>
 <p class="hint" id="message" role="status">Initializing 3D physics…</p>
+<p class="hint" id="networkHistory">Cluster survival: measured after packing and relaxation.</p>
 <section class="theory" id="model">
 <h2>Model and equations of motion</h2>
-<p>This is an <strong>exploratory 3D discrete elastic-strip model</strong> with no lentils. Each strip is a triangulated rectangular material surface (5 × 3 vertices by default, with a detailed 7 × 3 option). Different strips have no permanent bonds. The elastic surface can bend and twist; interpenetration is resisted by finite-thickness, two-sided, soft surface contacts. These are <em>penalty contacts</em>, not an exact guarantee against numerical crossing.</p>
+<p>This is an <strong>exploratory 3D discrete elastic-strip model</strong> with no lentils. Each strip is a triangulated rectangular material surface (5 × 2 vertices in the fastest mode, with 5 × 3 and 7 × 3 comparison meshes). Different strips have no permanent bonds. The elastic surface can bend and twist; interpenetration is resisted by finite-thickness, two-sided, soft surface contacts. These are <em>penalty contacts</em>, not an exact guarantee against numerical crossing.</p>
 <h3>Elastic strip</h3>
 <div class="math-display">\[
 E_{\mathrm{el}} = E_s+E_b,\qquad
@@ -103,11 +106,11 @@ Q(t)=1-\frac{\sum_{i\in C}\lVert\mathbf v'_i-\boldsymbol\omega_*\times\mathbf r'
 \]</div>
 <p>The contact graph connects strips with at least one touching triangle pair. Primes mean that cluster translation has been subtracted; \(\boldsymbol\omega_*\) is the best-fit common angular velocity. \(Q\) measures <em>instantaneous rigid-like velocity coherence</em> of strip centers and is undefined for clusters of fewer than three strips. This is not a proof of rigidity, and periodic unwrapping is approximate for very large clusters. We also measure uninterrupted inter-strip contact-pair ages.</p>
 <h3>Controlled packing before stirring</h3>
-<p>Instead of removing strips that cannot fit in a dense random placement, all requested strips are first initialized in a larger, dilute periodic cube. Over a chosen number of preparation steps the box contracts smoothly from \(L_0\) to the desired \(L_f\), translating each strip's center without scaling its internal mesh. The strips relax through elastic and frictional forces with stirring disabled. After compression finishes, the alternating sine drive begins and the plotted stirring time starts at \(t=0\).</p>
+<p>Instead of removing strips that cannot fit in a dense random placement, all requested strips are first initialized in a larger, dilute periodic cube. Over a chosen number of preparation steps the box contracts smoothly from \(L_0\) to the desired \(L_f\), translating each strip's center without scaling its internal mesh. The strips relax through elastic and frictional forces with stirring disabled. After compression, there is a <strong>separate zero-drive relaxation stage</strong> at constant box size. Only when relaxation finishes does the alternating sine drive begin, with stirring time starting at \(t=0\). The contact cluster is measured both immediately after compression and after relaxation to test whether it survives without being squeezed.</p>
 <div class="math-display">\[
 L(s)=L_0\left(\frac{L_f}{L_0}\right)^{3s^2-2s^3},\qquad s\in[0,1].
 \]</div>
-<p>Compression is a prescribed geometrical preparation protocol, <strong>not</strong> a pressure-controlled barostat or real gravity. Density is estimated using \(\phi_{\rm eff}=NLwh/L_{\rm box}^{3}\), with contact thickness as an effective \(h\). Compression can generate finite soft-contact penetration; monitor its reported maximum.</p>
+<p>Compression is a prescribed geometrical preparation protocol, <strong>not</strong> a pressure-controlled barostat or real gravity. For density scans, specify the estimated effective volume fraction \(\phi_{\rm eff}=NLwh/L_{\rm box}^{3}\), with the contact thickness used as effective \(h\), and calculate the target cube side length from it. This is <strong>not</strong> a measured packing fraction or a direct estimate of how much of a real salad bowl is filled. Compression can generate finite soft-contact penetration; monitor the maximum overlap as a fraction of contact thickness.</p>
 <h3>Numerical limitations</h3>
 <p>We use a periodic spatial broad phase, finite-thickness spring-dashpot triangle contacts, and semi-implicit Euler integration with \(\Delta t=0.003\). Because contact is <strong>soft</strong> and there is no continuous collision detection, tunneling or mesh crossing can still occur in difficult geometries. A real claim of topologically faithful entanglement would require collision-safe contact handling, time-step convergence and independent validation. No phase transition is assumed.</p>
 </section>
@@ -123,19 +126,24 @@ L(s)=L_0\left(\frac{L_f}{L_0}\right)^{3s^2-2s^3},\qquad s\in[0,1].
 </section>
 <aside>
 <div class="toolbar"><button id="play">Pause</button><button id="newRun">New run</button><button id="sameSeed" class="secondary">Restart same seed</button></div>
-<label>Number of strips <output id="stripsOut"></output><input id="strips" type="range" min="6" max="40" step="2" value="22"></label>
-<label>Mesh detail<select id="cols"><option value="5" selected>Fast · 5 × 3 vertices</option><option value="7">Detailed · 7 × 3 vertices</option></select></label>
-<label>Strip length <output id="lengthOut"></output><input id="length" type="range" min="1.8" max="3.8" step=".2" value="3.2"></label>
-<label>Periodic box side L <output id="boxOut"></output><input id="box" type="range" min="5.5" max="10" step=".5" value="7"></label>
-<label>Strip width <output id="widthOut"></output><input id="width" type="range" min=".4" max="1.3" step=".1" value=".9"></label>
+<div class="toolbar"><button id="presetLoose" class="secondary">Loose</button><button id="presetDense">Dense</button><button id="presetVeryDense" class="secondary">Very dense</button></div>
+<label>Number of strips <output id="stripsOut"></output><input id="strips" type="range" min="12" max="100" step="4" value="64"></label>
+<label>Mesh detail<select id="mesh"><option value="5x2" selected>Fast · 5 × 2 vertices</option><option value="5x3">Balanced · 5 × 3 vertices</option><option value="7x3">Detailed · 7 × 3 vertices</option></select></label>
+<label>Strip length <output id="lengthOut"></output><input id="length" type="range" min="2" max="4.6" step=".1" value="3.5"></label>
+<label>Strip width <output id="widthOut"></output><input id="width" type="range" min=".6" max="1.7" step=".1" value="1.2"></label>
+<label>Density control<select id="densityMode"><option value="fraction" selected>Target effective volume fraction</option><option value="manual">Manual periodic box side</option></select></label>
+<label id="densityControl">Target effective fraction φ <output id="densityTargetOut"></output><input id="densityTarget" type="range" min=".03" max=".28" step=".01" value=".18"></label>
+<label id="boxControl" hidden>Periodic box side L <output id="boxOut"></output><input id="box" type="range" min="4.5" max="12" step=".1" value="6.3"></label>
+<p class="hint" id="densityPreview">Target density and box size</p>
 <label>Bending stiffness κ <output id="bendingOut"></output><input id="bending" type="range" min="0" max="80" step="2" value="14"></label>
 <label>Friction coefficient μ <output id="frictionOut"></output><input id="friction" type="range" min="0" max="1.5" step=".05" value=".75"></label>
 <label>3D stirring strength K <output id="KOut"></output><input id="K" type="range" min="0" max="1.3" step=".05" value=".5"></label>
-<label>Packing quality<select id="packingSteps"><option value="180">Quick (more overlap)</option><option value="420" selected>Balanced</option><option value="800">Gentle (slower)</option></select></label>
-<label>Steps per worker batch<select id="batch"><option value="2">2 · smooth updates</option><option value="6" selected>6 · balanced</option><option value="12">12 · maximum throughput</option></select></label>
-<p class="hint">Each run packs all requested strips by smoothly compressing a dilute box. Choose fast or detailed mesh resolution; packing progress is shown above, and measurements begin after preparation. The optimized solver runs in a browser worker. More strips and higher packing quality still cost computation time.</p>
+<label>Compression quality<select id="packingSteps"><option value="180">Quick · more overlap risk</option><option value="420" selected>Balanced</option><option value="800">Gentle · more computation</option></select></label>
+<label>Relaxation at fixed volume<select id="relaxSteps"><option value="0">Skip · comparison only</option><option value="120">Short</option><option value="240" selected>Balanced</option><option value="500">Long</option></select></label>
+<label>Steps per worker batch<select id="batch"><option value="2">2 · responsive</option><option value="3" selected>3 · balanced</option><option value="8">8 · fewer updates</option></select></label>
+<p class="hint">Select a density preset or adjust the controls, then click New run. Preparation has <strong>compression → unforced relaxation → stirring</strong>. Large populations and dense conditions are computationally demanding. Compare the cluster after compression and after relaxation to test whether contacts persist.</p>
 <button id="export" class="secondary">Export statistics CSV</button>
-<p class="hint">Volume-filling network formation is a hypothesis to test. A large cluster fraction need not mean a mechanically coherent or permanently entangled object.</p>
+<p class="hint">This is a soft-contact prototype. At high density the surfaces may interpenetrate. Large overlap / thickness (above 25%) should be treated as a warning, not evidence for physical entanglement.</p>
 </aside>
 </div></main>
 <script type="module">
