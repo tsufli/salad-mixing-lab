@@ -147,3 +147,12 @@ test('coarse and detailed meshes preserve total strip mass at fixed strip dimens
  assert.ok(approximately(mass(a),mass(b),1e-10));
  assert.ok(approximately(mass(a),1.6*a.p.length*a.p.width,1e-10));
 });
+
+test('periodic surface hash does not miss triangle contacts across cube seams',()=>{
+ const s=init3d({strips:2,box:7,packing:false,seed:21});
+ const a=s.strips[0].ids,b=s.strips[1].ids;
+ for(let i=0;i<a.length;i++)s.vertices[b[i]].p=s.vertices[a[i]].p.map((x,k)=>x+(k===0?s.p.box-.1:0));
+ const pairs=surfaceCandidates(s).filter(([i,j])=>s.triangles[i].strip!==s.triangles[j].strip);
+ assert.ok(pairs.length>0);
+ assert.ok(pairs.some(([i,j])=>periodicProximity(s,s.triangles[i],s.triangles[j]).distance<s.p.thickness));
+});
