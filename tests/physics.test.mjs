@@ -1,5 +1,7 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {init,step,contactGeometry,pairForce,mixing} from '../physics.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import {init,step,drivingVelocity,contactGeometry,pairForce,mixing} from '../physics.mjs';
 test('deterministic seed',()=>{assert.deepEqual(init(),init());});
 test('rod-disk overlap and equal opposite forces',()=>{const a={type:'rod',x:2,y:2,theta:0,len:2,r:.1,vx:0,vy:0,omega:0,fx:0,fy:0,tau:0},b={type:'disk',x:2,y:2.12,r:.1,vx:0,vy:0,omega:0,fx:0,fy:0,tau:0};assert.ok(contactGeometry(a,b).overlap>0);pairForce(a,b,{stiffness:900,damping:10,friction:.5});assert.ok(Math.abs(a.fx+b.fx)<1e-8);assert.ok(Math.abs(a.fy+b.fy)<1e-8);});
 test('integration remains finite',()=>{const s=init({rods:8,disks:25});step(s,500);for(const o of s.items)for(const v of [o.x,o.y,o.vx,o.vy,o.theta,o.omega])assert.ok(Number.isFinite(v));assert.ok(Number.isFinite(mixing(s)));});
 test('disk disk overlap detected',()=>{const a={type:'disk',x:1,y:1,r:.2},b={type:'disk',x:1.3,y:1,r:.2};assert.ok(contactGeometry(a,b).overlap>.09);});
+test('alternating shear switches directions and differs from rotation',()=>{const p={drive:1.3,driveMode:'alternating',switchTime:2.5};const a=drivingVelocity(2,1,1,p),b=drivingVelocity(2,1,3,p);assert.ok(Math.abs(a.x)>.01);assert.equal(a.y,0);assert.equal(b.x,0);assert.ok(Math.abs(b.y)>.01);});
+test('shear is spatially nonuniform and deterministic',()=>{const p={drive:1.3,driveMode:'alternating',switchTime:2.5};const a=drivingVelocity(3,1,1,p),b=drivingVelocity(3,3,1,p);assert.notEqual(a.x,b.x);assert.deepEqual(a,drivingVelocity(3,1,1,p));});
