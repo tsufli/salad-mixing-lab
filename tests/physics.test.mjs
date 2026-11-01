@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {init,step,drivingVelocity,tracerMap,contactGeometry,pairForce,mixing} from '../physics.mjs';
+import {init,step,drivingVelocity,tracerMap,contactGeometry,pairForce,mixing,candidatePairs,clusterStats,structureFactor} from '../physics.mjs';
 test('deterministic initialization',()=>assert.deepEqual(init(),init()));
 test('periodic disk contact across boundary',()=>assert.ok(contactGeometry({type:'disk',x:.05,y:3,r:.15},{type:'disk',x:11.95,y:3,r:.15}).overlap>.19));
 test('rod-disk periodic contact exerts equal and opposite forces',()=>{
@@ -21,4 +21,32 @@ test('finite simulation with periodic position wrapping',()=>{
  const s=init({rods:8,disks:25});step(s,500);
  assert.ok(s.items.every(o=>[o.x,o.y,o.vx,o.vy,o.theta,o.omega].every(Number.isFinite)&&o.x>=0&&o.x<s.W&&o.y>=0&&o.y<s.H));
  assert.ok(Number.isFinite(mixing(s)));
+});
+
+test('larger default system and uniform placement',()=>{
+ const s=init();assert.equal(s.W,18);assert.equal(s.H,12);
+ assert.equal(s.items.filter(o=>o.type==='rod').length,36);
+ assert.equal(s.items.filter(o=>o.type==='disk').length,220);
+ const disk=s.items.filter(o=>o.type==='disk');
+ assert.ok(disk.some(o=>o.x>s.W/2));assert.ok(disk.some(o=>o.x<s.W/2));
+});
+test('legacy left-half initial distribution remains available',()=>{
+ const s=init({initial:'left',disks:50,rods:10});
+ assert.ok(s.items.filter(o=>o.type==='disk').every(o=>o.x<=s.W/2));
+});
+test('spatial broad phase contains all true geometric overlaps',()=>{
+ const s=init({rods:30,disks:100}),candidate=new Set(candidatePairs(s).map(([i,j])=>i+','+j));
+ for(let i=0;i<s.items.length;i++)for(let j=i+1;j<s.items.length;j++){
+  if(contactGeometry(s.items[i],s.items[j],s.W,s.H).overlap>0)
+   assert.ok(candidate.has(i+','+j),'missed pair '+i+','+j);
+ }
+});
+test('contact clusters and disk structure factor are well-defined',()=>{
+ const s=init(),c=clusterStats(s),sf=structureFactor(s);
+ assert.ok(c.largest>=1&&c.largest<=36);
+ assert.ok(c.largestFraction>0&&c.largestFraction<=1);
+ assert.ok(sf.length>3&&sf.every(d=>d.k>0&&Number.isFinite(d.S)&&d.S>=0));
+});
+test('zero rod contact graph is empty',()=>{
+ const s=init({rods:0,disks:40});assert.equal(clusterStats(s).largestFraction,0);
 });
