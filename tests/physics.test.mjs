@@ -1,9 +1,24 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {init,step,drivingVelocity,contactGeometry,pairForce,mixing} from '../physics.mjs';
-test('deterministic seed',()=>{assert.deepEqual(init(),init());});
-test('rod-disk overlap and equal opposite forces',()=>{const a={type:'rod',x:2,y:2,theta:0,len:2,r:.1,vx:0,vy:0,omega:0,fx:0,fy:0,tau:0},b={type:'disk',x:2,y:2.12,r:.1,vx:0,vy:0,omega:0,fx:0,fy:0,tau:0};assert.ok(contactGeometry(a,b).overlap>0);pairForce(a,b,{stiffness:900,damping:10,friction:.5});assert.ok(Math.abs(a.fx+b.fx)<1e-8);assert.ok(Math.abs(a.fy+b.fy)<1e-8);});
-test('integration remains finite',()=>{const s=init({rods:8,disks:25});step(s,500);for(const o of s.items)for(const v of [o.x,o.y,o.vx,o.vy,o.theta,o.omega])assert.ok(Number.isFinite(v));assert.ok(Number.isFinite(mixing(s)));});
-test('disk disk overlap detected',()=>{const a={type:'disk',x:1,y:1,r:.2},b={type:'disk',x:1.3,y:1,r:.2};assert.ok(contactGeometry(a,b).overlap>.09);});
-test('alternating shear switches directions and differs from rotation',()=>{const p={drive:1.3,driveMode:'alternating',switchTime:2.5};const a=drivingVelocity(2,1,1,p),b=drivingVelocity(2,1,3,p);assert.ok(Math.hypot(a.x,a.y)>.01);assert.ok(Math.hypot(b.x,b.y)>.01);assert.notDeepEqual(a,b);});
-test('shear is spatially nonuniform and deterministic',()=>{const p={drive:1.3,driveMode:'alternating',switchTime:2.5};const a=drivingVelocity(3,1,1,p),b=drivingVelocity(3,3,1,p);assert.notEqual(a.x,b.x);assert.deepEqual(a,drivingVelocity(3,1,1,p));});
-
-test('cellular drive is incompressible and has zero wall-normal velocity',()=>{const p={drive:1.3,driveMode:'alternating',switchTime:2.5},eps=1e-5,x=4,y=3;for(const time of [1,3]){const u=drivingVelocity(x,y,time,p);const dx=(drivingVelocity(x+eps,y,time,p).x-drivingVelocity(x-eps,y,time,p).x)/(2*eps),dy=(drivingVelocity(x,y+eps,time,p).y-drivingVelocity(x,y-eps,time,p).y)/(2*eps);assert.ok(Math.abs(dx+dy)<1e-7);assert.ok(Math.abs(drivingVelocity(0,y,time,p).x)<1e-8);assert.ok(Math.abs(drivingVelocity(x,0,time,p).y)<1e-8);}});
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {init,step,drivingVelocity,tracerMap,contactGeometry,pairForce,mixing} from '../physics.mjs';
+test('deterministic initialization',()=>assert.deepEqual(init(),init()));
+test('periodic disk contact across boundary',()=>assert.ok(contactGeometry({type:'disk',x:.05,y:3,r:.15},{type:'disk',x:11.95,y:3,r:.15}).overlap>.19));
+test('rod-disk periodic contact exerts equal and opposite forces',()=>{
+ const a={type:'rod',x:11.8,y:4,theta:0,len:1,r:.1,vx:0,vy:0,omega:0,fx:0,fy:0,tau:0},b={type:'disk',x:.15,y:4.15,r:.1,vx:0,vy:0,omega:0,fx:0,fy:0,tau:0};
+ assert.ok(contactGeometry(a,b).overlap>0);pairForce(a,b,{stiffness:900,damping:13,friction:.5});
+ assert.ok(Math.abs(a.fx+b.fx)<1e-8);assert.ok(Math.abs(a.fy+b.fy)<1e-8);
+});
+test('exact passive tracer map matches two sine shear steps',()=>{
+ const x=2,y=1,K=.3,p={K,halfPeriod:2.5},u=drivingVelocity(x,y,0,p),x1=x+u.x*2.5,v=drivingVelocity(x1,y,2.5+1e-6,p),y1=y+v.y*2.5,m=tracerMap(x,y,K);
+ assert.ok(Math.abs(m.x-x1)<1e-9);assert.ok(Math.abs(m.y-y1)<1e-9);
+});
+test('tracer map preserves area locally',()=>{
+ const x=2,y=1,k=.7,h=1e-5,f=tracerMap,x1=f(x+h,y,k),x0=f(x-h,y,k),y1=f(x,y+h,k),y0=f(x,y-h,k);
+ const det=((x1.x-x0.x)*(y1.y-y0.y)-(x1.y-x0.y)*(y1.x-y0.x))/(4*h*h);
+ assert.ok(Math.abs(det-1)<1e-6);
+});
+test('finite simulation with periodic position wrapping',()=>{
+ const s=init({rods:8,disks:25});step(s,500);
+ assert.ok(s.items.every(o=>[o.x,o.y,o.vx,o.vy,o.theta,o.omega].every(Number.isFinite)&&o.x>=0&&o.x<s.W&&o.y>=0&&o.y<s.H));
+ assert.ok(Number.isFinite(mixing(s)));
+});
