@@ -114,7 +114,7 @@ test('dense packing initializes all requested strips rather than silently droppi
 });
 
 test('compression preserves mesh reference lengths and switches to stirring t=0',()=>{
- const s=init3d({strips:8,box:5.5,packingSteps:25});
+ const s=init3d({strips:8,box:5.5,packingSteps:25,relaxSteps:0});
  const start=s.p.box,rests=s.springs.map(e=>e.rest);
  step3d(s,12);
  assert.ok(s.preparing);
@@ -155,4 +155,48 @@ test('periodic surface hash does not miss triangle contacts across cube seams',(
  const pairs=surfaceCandidates(s).filter(([i,j])=>s.triangles[i].strip!==s.triangles[j].strip);
  assert.ok(pairs.length>0);
  assert.ok(pairs.some(([i,j])=>periodicProximity(s,s.triangles[i],s.triangles[j]).distance<s.p.thickness));
+});
+
+test('relaxation follows compression at fixed density and precedes any stirring time',()=>{
+ const p={strips:16,box:5.5,packingSteps:15,relaxSteps:24,seed:41};
+ const s=init3d(p),rest=s.springs.map(x=>x.rest);
+ assert.equal(s.stage,'packing');
+ step3d(s,15);
+ assert.equal(s.stage,'relaxing');
+ assert.equal(s.t,0);
+ assert.ok(s.packedCluster!==null);
+ assert.ok(approximately(s.p.box,p.box));
+ const afterPack=diagnostics3d(s);
+ assert.ok(afterPack.packingDensity>0);
+ step3d(s,23);
+ assert.equal(s.stage,'relaxing');
+ assert.equal(s.t,0);
+ assert.ok(approximately(s.p.box,p.box));
+ step3d(s,1);
+ assert.equal(s.stage,'stirring');
+ assert.ok(s.relaxedCluster!==null);
+ assert.equal(s.t,0);
+ assert.deepEqual(rest,s.springs.map(x=>x.rest));
+ step3d(s,4);
+ assert.ok(approximately(s.t,4*s.p.dt));
+ assert.ok(s.vertices.every(v=>finite3(v.p)&&finite3(v.v)));
+});
+test('init preserves 100 strips with dilute-to-dense placement',()=>{
+ const s=init3d({strips:100,box:6.6,cols:5,rows:2,packingSteps:15,relaxSteps:0});
+ assert.equal(s.strips.length,100);
+ assert.equal(s.triangles.length,100*2*(s.p.cols-1)*(s.p.rows-1));
+ assert.equal(s.placementFailed,0);
+ assert.ok(s.p.box>6.6);
+});
+test('effective density and compression diagnostics are finite and internally consistent',()=>{
+ const s=init3d({strips:20,box:5.5,packingSteps:15,relaxSteps:6});
+ step3d(s,21);
+ const d=diagnostics3d(s);
+ const predicted=s.strips.length*s.p.length*s.p.width*s.p.thickness/s.p.box**3;
+ assert.ok(approximately(d.packingDensity,predicted));
+ assert.ok(d.prepMaxOverlap>=0);
+ assert.ok(d.highestOverlapFraction>=0);
+ assert.ok(d.highestOverlapFraction<Infinity);
+ assert.ok(d.packedCluster>=0&&d.packedCluster<=1);
+ assert.ok(d.relaxedCluster>=0&&d.relaxedCluster<=1);
 });
