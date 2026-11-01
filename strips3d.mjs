@@ -160,41 +160,41 @@ export function init3d(options={}){
  }
  return s;
 }
+// Dynamic periodic triangle-AABB hash broad phase. A triangle is placed
+// in every cell its thickness-expanded bounding box intersects, making this
+// valid even when its mesh is deformed or spans a periodic seam.
 function collisionCandidates(s){
- const {triangles,p}=s,L=p.box,info=new Array(triangles.length);
- let maxRadius=0;
+ const {triangles,vertices,p}=s,L=p.box;
+ const n=Math.max(2,Math.min(14,Math.floor(L/1.1))),cell=L/n,half=p.thickness/2;
+ const grid=new Map(),pairKeys=new Set(),out=[],boxes=[];
+ const cellId=(x,y,z)=>(x*n+y)*n+z;
  for(let i=0;i<triangles.length;i++){
-  const P=triPoints(s,triangles[i]),c=center3(P),r=radius3(P,c);
-  maxRadius=Math.max(maxRadius,r);
-  info[i]={c,r,lo:[0,1,2].map(k=>Math.min(...P.map(v=>v[k]))),
-    hi:[0,1,2].map(k=>Math.max(...P.map(v=>v[k])))};
- }
- // Cell width >= sum of any two triangle radii plus contact thickness.
- // Thus every true contact is found in this cell or its 26 neighbors,
- // even if the deformable triangles stretch beyond their nominal size.
- const n=Math.max(2,Math.floor(L/(2*maxRadius+p.thickness+1e-8))),cell=L/n,hash=new Map();
- const key=(a,b,c)=>(a*n+b)*n+c;
- for(let i=0;i<triangles.length;i++){
-  const q=info[i].c.map(x=>Math.floor(mod(x,L)/cell)%n);info[i].q=q;
-  const id=key(...q);if(!hash.has(id))hash.set(id,[]);hash.get(id).push(i);
- }
- const out=[];
- for(let i=0;i<triangles.length;i++){
-  const a=triangles[i],v=info[i],seen=new Set();
-  for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)for(let dz=-1;dz<=1;dz++){
-   const cellIndex=key(mod(v.q[0]+dx,n),mod(v.q[1]+dy,n),mod(v.q[2]+dz,n));
-   for(const j of hash.get(cellIndex)||[]){
-    if(j<=i||seen.has(j))continue;seen.add(j);
-    const b=triangles[j];
-    if(a.strip===b.strip&&Math.abs(a.i-b.i)<=1)continue;
-    const w=info[j],dist=Math.hypot(...v.c.map((x,k)=>x-w.c[k]-Math.round((x-w.c[k])/L)*L));
-    if(dist>v.r+w.r+p.thickness)continue;
-    const shift=v.c.map((x,k)=>Math.round((x-w.c[k])/L)*L);
-    let nearby=true;
-    for(let k=0;k<3;k++)if(v.lo[k]-(w.hi[k]+shift[k])>p.thickness||(w.lo[k]+shift[k])-v.hi[k]>p.thickness){nearby=false;break;}
-    if(nearby)out.push([i,j]);
+   const tri=triangles[i],P=tri.ids.map(j=>vertices[j].p),lo=[0,0,0],hi=[0,0,0],center=[0,0,0],ranges=[];
+   for(let k=0;k<3;k++){
+     lo[k]=Math.min(P[0][k],P[1][k],P[2][k]);hi[k]=Math.max(P[0][k],P[1][k],P[2][k]);
+     center[k]=(P[0][k]+P[1][k]+P[2][k])/3;
+     const loCell=Math.floor((lo[k]-half)/cell),hiCell=Math.floor((hi[k]+half)/cell);
+     if(hiCell-loCell+1>=n)ranges.push(Array.from({length:n},(_,j)=>j));
+     else{const list=[];for(let j=loCell;j<=hiCell;j++)list.push(mod(j,n));ranges.push(list);}
    }
-  }
+   boxes.push({lo,hi,center});
+   for(const x of ranges[0])for(const y of ranges[1])for(const z of ranges[2]){
+     const id=cellId(x,y,z);let group=grid.get(id);
+     if(!group){group=[];grid.set(id,group);}group.push(i);
+   }
+ }
+ for(const group of grid.values())for(let a=0;a<group.length;a++)for(let b=a+1;b<group.length;b++){
+   const i=group[a],j=group[b],A=triangles[i],B=triangles[j];
+   if(A.strip===B.strip&&Math.abs(A.i-B.i)<=1)continue;
+   const key=i*triangles.length+j;
+   if(pairKeys.has(key))continue;pairKeys.add(key);
+   const c=boxes[i],d=boxes[j];
+   let touching=true;
+   for(let k=0;k<3;k++){
+     const shift=Math.round((c.center[k]-d.center[k])/L)*L;
+     if(c.lo[k]-d.hi[k]-shift>p.thickness||d.lo[k]+shift-c.hi[k]>p.thickness){touching=false;break;}
+   }
+   if(touching)out.push([i,j]);
  }
  return out;
 }
@@ -212,7 +212,21 @@ function applyElastic(s){
  }
 }
 function contactForce(s,ta,tb,id,dt){
- const {p,vertices:v}=s,prox=periodicProximity(s,ta,tb);
+ const {p,vertices:v}=s;
+ // Cheap separating-plane test: when all vertices of one surface are farther
+ // than h from the other's plane, the triangles cannot touch.
+ const A=triPoints(s,ta),B=triPoints(s,tb),ca=center3(A),cb=center3(B),L=p.box,
+ shift=ca.map((x,k)=>Math.round((x-cb[k])/L)*L),Q=B.map(x=>add(x,shift));
+ function planeFar(T,U){
+  const n=cross(sub(T[1],T[0]),sub(T[2],T[0])),m=norm(n);
+  if(m<1e-12)return false;
+  const d0=dot(n,sub(U[0],T[0]))/m;
+  const d1=dot(n,sub(U[1],T[0]))/m;
+  const d2=dot(n,sub(U[2],T[0]))/m;
+  return Math.min(d0,d1,d2)>p.thickness||Math.max(d0,d1,d2)<-p.thickness;
+ }
+ if(planeFar(A,Q)||planeFar(Q,A))return false;
+ const prox=triangleProximity(A,Q);
  if(prox.distance>=p.thickness)return false;
  let normal;
  if(prox.distance>1e-8)normal=scale(sub(prox.pa,prox.pb),1/prox.distance);
