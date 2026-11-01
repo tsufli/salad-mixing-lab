@@ -1,75 +1,96 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Salad Mixing Lab</title><style>
-:root{font-family:system-ui,sans-serif;color:#e7eef7;background:#0d1421}body{margin:0}main{max-width:1150px;margin:auto;padding:24px}h1{margin-bottom:6px}p{color:#aabbd0}.layout{display:grid;grid-template-columns:minmax(0,1fr) 255px;gap:20px}@media(max-width:750px){.layout{grid-template-columns:1fr}}canvas{width:100%;height:auto;background:#152237;border:1px solid #40516a;border-radius:12px}aside{background:#19263a;border-radius:12px;padding:16px}label{display:block;margin:12px 0;font-size:14px}input,select{width:100%}select{padding:7px;background:#24374f;color:#e7eef7;border:1px solid #586d82;border-radius:5px}.theory{background:#19263a;border:1px solid #40516a;border-radius:12px;padding:18px;margin:20px 0}.theory h2{margin-top:0}.theory h3{margin-bottom:7px}.math-display{overflow-x:auto;padding:10px 4px;margin:12px 0 18px;color:#eff6fc;font-size:17px;line-height:1.5}.math-display mjx-container[display="true"]{margin:0.5em 0!important}.theory{max-width:100%;overflow:hidden}.theory p{line-height:1.55}button{background:#70b99c;border:0;border-radius:8px;padding:10px 15px;margin:5px 4px 5px 0;font-weight:700;cursor:pointer}.stats{display:flex;gap:25px;flex-wrap:wrap;margin:12px 0;color:#b6d9e5}.hint{font-size:13px}code{color:#9cd6bc}</style><script>window.MathJax={tex:{displayMath:[['\\[','\\]']],inlineMath:[['\\(','\\)']]},options:{skipHtmlTags:['script','noscript','style','textarea','pre','code']}};</script><script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script></head><body><main><h1>Salad Mixing Lab</h1><p>Long-time rod–disk statistics under alternating sine flow in a larger 18 × 12 periodic box.</p><div class="layout"><section><canvas id="scene" width="840" height="560"></canvas><section class="theory"><h2>Model and equations of motion</h2>
-<p>This is a <strong>dimensionless, two-dimensional discrete-element model</strong>, not a Navier–Stokes solver. The rods are rigid spherocylinders (capsules), and the lentils are disks. All particles have finite mass, translation and rotation. The external stirring is a prescribed background velocity field; particle contacts can cause deviations from it.</p>
-<h3>Prescribed alternating sine flow</h3>
+:root{font-family:system-ui,sans-serif;color:#e7eef7;background:#0d1421}body{margin:0}main{max-width:1150px;margin:auto;padding:24px}h1{margin-bottom:6px}p{color:#aabbd0}.layout{display:grid;grid-template-columns:minmax(0,1fr) 255px;gap:20px}@media(max-width:750px){.layout{grid-template-columns:1fr}}canvas{width:100%;height:auto;background:#152237;border:1px solid #40516a;border-radius:12px}aside{background:#19263a;border-radius:12px;padding:16px}label{display:block;margin:12px 0;font-size:14px}input,select{width:100%}select{padding:7px;background:#24374f;color:#e7eef7;border:1px solid #586d82;border-radius:5px}.theory{background:#19263a;border:1px solid #40516a;border-radius:12px;padding:18px;margin:20px 0}.theory h2{margin-top:0}.theory h3{margin-bottom:7px}.math-display{overflow-x:auto;padding:10px 4px;margin:12px 0 18px;color:#eff6fc;font-size:17px;line-height:1.5}.math-display mjx-container[display="true"]{margin:0.5em 0!important}.theory{max-width:100%;overflow:hidden}.theory p{line-height:1.55}button{background:#70b99c;border:0;border-radius:8px;padding:10px 15px;margin:5px 4px 5px 0;font-weight:700;cursor:pointer}.stats{display:flex;gap:25px;flex-wrap:wrap;margin:12px 0;color:#b6d9e5}.hint{font-size:13px}code{color:#9cd6bc}</style><script>window.MathJax={tex:{displayMath:[['\\[','\\]']],inlineMath:[['\\(','\\)']]},options:{skipHtmlTags:['script','noscript','style','textarea','pre','code']}};</script><script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script></head><body><main><h1>Salad Mixing Lab</h1><p>Flexible-fiber network dynamics and small-disk statistics under alternating sine flow in a periodic box.</p><div class="layout"><section><canvas id="scene" width="840" height="560"></canvas><section class="theory"><h2>Model and equations of motion</h2>
+<p>A dimensionless two-dimensional <strong>flexible-fiber and disk discrete-element model</strong>. Each fiber is a chain of nodes connected by elastic bonds. Different fibers and disks interact through repulsive contact forces and history-dependent tangential friction. The network is <em>emergent</em>: no bonds are added between different fibers.</p>
+<h3>Alternating sine-flow drive</h3>
 <div class="math-display">\[
 \mathbf u(\mathbf r,t)=
 \begin{cases}
-\left(\dfrac{WK}{\tau}\sin\dfrac{2\pi y}{H},\,0\right),
-& 0\le t\bmod 2\tau<\tau,\\[6pt]
-\left(0,\,\dfrac{HK}{\tau}\sin\dfrac{2\pi x}{W}\right),
-& \tau\le t\bmod 2\tau<2\tau .
+\left(\dfrac{WK}{\tau}\sin\dfrac{2\pi y}{H},\,0\right), & 0\leq t\bmod 2\tau<\tau,\\[6pt]
+\left(0,\,\dfrac{HK}{\tau}\sin\dfrac{2\pi x}{W}\right), & \tau\leq t\bmod 2\tau<2\tau .
 \end{cases}
 \]</div>
-<p>The box has dimensions W = 18, H = 12 and periodic boundaries. Each half-cycle lasts τ = 2.5 simulation time units. The slider K sets the dimensionless shear displacement. The imposed field is incompressible. Coordinates wrap at opposite boundaries, and particles interact across periodic seams.</p>
-<h3>Translational motion</h3>
+<p>The domain is periodic with \(W=18\), \(H=12\), and switching interval \(\tau=2.5\). Each node or disk is driven toward the prescribed local velocity through linear drag. The flow is imposed, not obtained from solving Navier–Stokes.</p>
+<h3>Elastic energy of a fiber</h3>
 <div class="math-display">\[
-m_i\ddot{\mathbf r}_i
-=\sum_{j\ne i}\mathbf F_{ij}^{\mathrm{contact}}
-+\gamma_t m_i\bigl[\mathbf u(\mathbf r_i,t)-\dot{\mathbf r}_i\bigr].
+E_s=\frac{k_s}{2}\sum_{a=1}^{M-1}\left(\left|\mathbf r_{a+1}-\mathbf r_a\right|-\ell_0\right)^2,\qquad
+E_b=\frac{\kappa}{2}\sum_{a=2}^{M-1}\left|\mathbf r_{a-1}-2\mathbf r_a+\mathbf r_{a+1}\right|^2.
 \]</div>
-<p>The first term sums collisions with <em>both species</em> (rod–rod, disk–disk and rod–disk). The second term relaxes each particle velocity toward the local stirring velocity. In the implementation γₜ = 7, so this is a finite-response model, not tracer advection. No gravity or fluid-mediated interparticle forces are included.</p>
-<h3>Rotation of the rods</h3>
+<p>The elastic forces are computed from \(-\nabla(E_s+E_b)\), with minimum-image bond displacements. \(k_s=400\) is fixed, while \(\kappa\) is controlled by the bending-stiffness slider. This is a discrete curvature penalty, not a calibrated thin-sheet bending modulus. All fibers have five nodes.</p>
+<h3>Translational dynamics</h3>
 <div class="math-display">\[
-I_i\dot{\omega}_i=\sum_{j\ne i}\tau_{ij}^{\mathrm{contact}}
-+\gamma_t I_i\left(\Omega_{i,\mathrm{drive}}-\omega_i\right)
-\]
-\[
-\Omega_{i,\mathrm{drive}}=
-\frac{\left[\mathbf u(\mathbf r_i+\frac{\ell_i}{2}\mathbf e_i,t)
--\mathbf u(\mathbf r_i-\frac{\ell_i}{2}\mathbf e_i,t)\right]\cdot\mathbf e_i^\perp}{\ell_i}.
+m_a\ddot{\mathbf r}_a
+=-\frac{\partial(E_s+E_b)}{\partial\mathbf r_a}
++\sum_{b\ne a}\mathbf F_{ab}^{\mathrm{contact}}
++\gamma m_a\left[\mathbf u(\mathbf r_a,t)-\dot{\mathbf r}_a\right].
 \]</div>
-<p>Here eᵢ = (cos θᵢ, sin θᵢ) points along the rod and eᵢ⊥ = (−sin θᵢ, cos θᵢ). This finite-difference approximation drives rod rotation toward the local flow-induced angular velocity. Contact forces also exert torques through their lever arms.</p>
-<h3>Contact law</h3>
+<p>For independent disks the elastic term vanishes. Here \(\gamma=8\). Interspecies contact forces act on individual nodes, allowing fibers to bend around obstacles. No tensile attraction or permanent cross-fiber links are used.</p>
+<h3>Normal and history-dependent tangential contact</h3>
 <div class="math-display">\[
 \begin{aligned}
-\delta_{ij}&=a_i+a_j-d_{ij},\\
-\mathbf F_n&=\max\!\left(0,k_n\delta_{ij}-\eta_n v_n\right)\hat{\mathbf n},
-\qquad(\delta_{ij}>0),\\
-\mathbf F_t&=-\mu\,|\mathbf F_n|\tanh\!\left(\frac{v_t}{v_0}\right)\hat{\mathbf t},\\
-\tau_{ij}&=(\mathbf r_{\mathrm{contact}}-\mathbf r_i)\times\mathbf F_{ij}.
+\delta_{ab}&=R_a+R_b-d_{ab},\\
+F_n&=\max\left(0,k_n\delta_{ab}-\eta_n v_n\right),\quad\delta_{ab}>0,\\
+\dot{\xi}_{ab}&=v_t,\qquad F_t^{\mathrm{trial}}=-k_t\xi_{ab}-\eta_t v_t,\\
+F_t&=\operatorname{clip}\left(F_t^{\mathrm{trial}},-\mu F_n,\mu F_n\right),\\
+\mathbf F_{ab}&=F_n\hat{\mathbf n}+F_t\hat{\mathbf t}.
 \end{aligned}
 \]</div>
-<p>For rods, dᵢⱼ is computed between their centerline segments (or between a segment and disk center), using the nearest periodic image. Parameters are kₙ = 900, ηₙ = 13 and v₀ = 0.06. This is <strong>regularized sliding friction</strong>, without history-dependent static friction or permanent binding. Contacts are instantaneous and may appear or disappear during stirring.</p>
-<h3>Relation to the exact tracer map</h3>
+<p>The tangential spring displacement \(\xi_{ab}\) persists while a node–node or disk–node contact remains active; it is projected as the contact tangent rotates and reset when the contact breaks. On sliding, the memory is corrected to enforce the Coulomb limit. Parameters: \(k_n=650\), \(\eta_n=10\), \(k_t=130\), \(\eta_t=2\). Contact is implemented between nodes, so it approximates each fiber as a bead-chain, not as a continuous nonpenetrable ribbon.</p>
+<h3>What the measurements mean</h3>
 <div class="math-display">\[
-\begin{aligned}
-X_{n+1}&=\left[X_n+K\sin(2\pi Y_n)\right]\bmod 1,\\
-Y_{n+1}&=\left[Y_n+K\sin(2\pi X_{n+1})\right]\bmod 1,\\
-X&=\frac{x}{W},\qquad Y=\frac{y}{H}.
-\end{aligned}
+G(t)=\frac{N_{\mathrm{largest\ connected\ fiber\ cluster}}(t)}{N_f},
+\qquad
+S_{dd}(\mathbf k)=\frac{1}{N_d}\left|\sum_{j=1}^{N_d}e^{i\mathbf k\cdot\mathbf r_j}\right|^2.
 \]</div>
-<p>This exact area-preserving map holds for <strong>ideal passive tracers</strong> observed once per full cycle. Our rods and disks do <em>not</em> follow it exactly: finite inertia, velocity relaxation and mutual contact forces change their paths. The simulation integrates their equations explicitly with time step Δt = 0.003; velocities are capped as a numerical safeguard.</p>
-</section><h2>Observables</h2><div class="stats"><span id="clock"></span><span id="mix"></span><span id="contacts"></span></div><canvas id="chart" width="840" height="190"></canvas><h3>Time-averaged disk structure factor S<sub>dd</sub>(k)</h3><canvas id="sfchart" width="840" height="190"></canvas><p id="averageStatus" class="hint">Averaging starts after t = 10.</p><p class="hint">The mixing metric is the normalized variance of disk counts in a 4 × 3 spatial grid. For a finite number of randomly distributed disks, it fluctuates above zero. Disk–rod, rod–rod, and disk–disk contacts are enabled.</p></section><aside><button id="run">Pause</button><button id="reset">New run</button><button id="repeat">Restart same seed</button><label>Disk initialization<select id="initial"><option value="uniform">Uniform (long-time)</option><option value="left">Left half (mixing)</option></select></label><label>Rod count <output id="rodsOut"></output><input id="rods" type="range" min="0" max="70" value="36"></label><label>Disk count <output id="disksOut"></output><input id="disks" type="range" min="15" max="400" value="220"></label><label>Rod aspect ratio <output id="aspectOut"></output><input id="aspect" type="range" min="2" max="9" step="1" value="6"></label><label>Friction coefficient <output id="frictionOut"></output><input id="friction" type="range" min="0" max="1" step="0.05" value="0.55"></label><label>Shear displacement K <output id="KOut"></output><input id="K" type="range" min="0" max="1.5" step="0.05" value="0.7"></label><p class="hint">Each half-period lasts 2.5 time units. In normalized coordinates, passive tracers obey <code>X' = X + K sin(2πY)</code>, then <code>Y' = Y + K sin(2πX')</code>, modulo 1.</p><p class="hint">The rods/disks have inertia, contacts and drag: their trajectories are <em>not</em> exactly this tracer map. Changes take effect on the next run. Use Restart same seed to compare friction.</p><label>Simulation speed<select id="speed"><option value="5">Normal</option><option value="15" selected>Fast</option><option value="30">Very fast</option></select></label><button id="export">Export data CSV</button></aside></div></main><script type="module">
-import {init,step,mixing,clusterStats,structureFactor} from './physics.mjs';const $=id=>document.getElementById(id),c=$('scene'),ctx=c.getContext('2d'),chart=$('chart'),g=chart.getContext('2d');let seed=17,currentSeed=17,sim,playing=true,history=[],sfAccum=[],sfCount=0,nextSample=0;
-const params=()=>Object.fromEntries(['rods','disks','aspect','friction','K'].map(k=>[k,+$(k).value]));
-function reset(reuse=false){if(!reuse)currentSeed=seed++;sim=init({...params(),initial:$('initial').value,seed:currentSeed});sfAccum=[];sfCount=0;history=[];nextSample=0;recordSample();}reset();
-function recordSample(){const cs=clusterStats(sim);history.push([sim.t,mixing(sim),cs.largestFraction,cs.meanDegree]);if(sim.t>=10){const f=structureFactor(sim);if(!sfAccum.length)sfAccum=f.map(d=>({k:d.k,sum:0}));for(let i=0;i<f.length;i++)sfAccum[i].sum+=f[i].S;sfCount++;}nextSample=sim.t+.5;}
-for(const k of ['rods','disks','aspect','friction','K']){const upd=()=>$(k+'Out').textContent=$(k).value;$(k).addEventListener('input',upd);upd();}
-$('run').onclick=()=>{playing=!playing;$('run').textContent=playing?'Pause':'Resume';};$('reset').onclick=()=>reset();$('repeat').onclick=()=>reset(true);
-$('export').onclick=()=>{const csv='time,mixing_variance,largest_rod_cluster_fraction,mean_rod_degree\n'+history.map(x=>x.join(',')).join('\n')+'\n\nwave_number,mean_Sdd\n'+sfAccum.map(x=>[x.k,sfCount?x.sum/sfCount:0].join(',')).join('\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const a=document.createElement('a');a.href=url;a.download='mixing.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
-function drawParticle(o,x,y,sx,sy){ctx.save();ctx.translate(x*sx,y*sy);if(o.type==='rod'){ctx.rotate(o.theta);ctx.fillStyle='#73ba8f';ctx.strokeStyle='#b6e2bd';ctx.lineWidth=1.2;const w=o.len*sx,h=o.r*2*sy;ctx.beginPath();ctx.roundRect(-w/2-h/2,-h/2,w+h,h,h/2);ctx.fill();ctx.stroke();}else{ctx.fillStyle='#e0b18b';ctx.beginPath();ctx.arc(0,0,o.r*sx,0,Math.PI*2);ctx.fill();}ctx.restore();}
-function draw(){ctx.clearRect(0,0,c.width,c.height);const sx=c.width/sim.W,sy=c.height/sim.H;ctx.save();ctx.beginPath();ctx.rect(0,0,c.width,c.height);ctx.clip();for(const o of sim.items)for(const dx of [-sim.W,0,sim.W])for(const dy of [-sim.H,0,sim.H])drawParticle(o,o.x+dx,o.y+dy,sx,sy);ctx.restore();
-$('clock').textContent='t = '+sim.t.toFixed(2);$('mix').textContent='Mixing variance = '+mixing(sim).toFixed(3);$('contacts').textContent='Contacts = '+sim.contacts;
-function plot(canvas,data,title,reference=null){
-const q=canvas.getContext('2d'),w=canvas.width,h=canvas.height,L=44,R=w-10,T=26,B=h-22;q.clearRect(0,0,w,h);q.strokeStyle='#74869a';q.beginPath();q.moveTo(L,T);q.lineTo(L,B);q.lineTo(R,B);q.stroke();q.fillStyle='#c2d7e5';q.font='13px system-ui';q.fillText(title,L+6,17);if(!data.length)return;
-const xmin=Math.min(...data.map(d=>d[0])),xmax=Math.max(xmin+1e-6,...data.map(d=>d[0]));const ymax=Math.max(1,reference||0,...data.flatMap(d=>d.slice(1)));
-const X=v=>L+(v-xmin)/(xmax-xmin)*(R-L),Y=v=>B-v/ymax*(B-T);if(reference!==null){q.setLineDash([4,4]);q.strokeStyle='#8899aa';q.beginPath();q.moveTo(L,Y(reference));q.lineTo(R,Y(reference));q.stroke();q.setLineDash([]);}
-for(let j=1;j<data[0].length;j++){q.strokeStyle=j===1?'#78cda7':'#f1b778';q.lineWidth=2;q.beginPath();data.forEach((d,i)=>i?q.lineTo(X(d[0]),Y(d[j])):q.moveTo(X(d[0]),Y(d[j])));q.stroke();}
-q.fillStyle='#afc3d4';q.fillText(ymax.toFixed(2),3,T+6);q.fillText(xmax.toFixed(1),R-30,B+16);}
-plot(chart,history.map(d=>[d[0],d[1],d[2]]),'Green: disk variance; orange: largest rod-cluster fraction');
-plot($('sfchart'),sfCount?sfAccum.map(d=>[d.k,d.sum/sfCount]):[],'Post-transient Sdd(k) (reference: 1)',1);
-$('averageStatus').textContent='Post-transient samples: '+sfCount+' | t = '+sim.t.toFixed(2)+' | rods: '+sim.items.filter(o=>o.type==='rod').length+' | disks: '+sim.items.filter(o=>o.type==='disk').length;
+<p>Connectivity is based on <strong>instantaneous contacts between different fibers</strong>. Contact age records the current uninterrupted lifetime of a node-pair contact. A large connected component alone does not prove mechanical rigidity. The structure factor is radially averaged and sampled after \(t=10\). Frictional history can support shear loads, but our two-dimensional node-chain approximation still cannot reproduce the full over-and-under geometry of three-dimensional flexible leaves.</p>
+<h3>Numerical method and limitations</h3>
+<p>The equations are integrated with an explicit semi-implicit Euler update at \(\Delta t=0.002\). A periodic cell grid accelerates short-range contacts; velocity caps are used as a safety measure. The model has not been calibrated against real leaves, and numerical convergence or system-size independence has not yet been demonstrated. For ideal noninteracting tracers the exact one-cycle map is \(X'=X+K\sin(2\pi Y)\), \(Y'=Y+K\sin(2\pi X')\), modulo one; interacting fibers and disks need not follow it.</p>
+</section><h2>Observables</h2><div class="stats"><span id="clock"></span><span id="mix"></span><span id="contacts"></span></div><canvas id="chart" width="840" height="190"></canvas><h3>Time-averaged disk structure factor S<sub>dd</sub>(k)</h3><canvas id="sfchart" width="840" height="190"></canvas><p id="averageStatus" class="hint">Averaging starts after t = 10.</p><p class="hint">The mixing metric is the normalized variance of disk counts in a 4 × 3 spatial grid. For a finite number of randomly distributed disks, it fluctuates above zero. Disk–rod, rod–rod, and disk–disk contacts are enabled.</p></section><aside><button id="run">Pause</button><button id="reset">New run</button><button id="repeat">Restart same seed</button>
+<label>Disk initialization<select id="initial"><option value="uniform">Uniform (long-time)</option><option value="left">Left half (mixing)</option></select></label>
+<label>Fibers <output id="fibersOut"></output><input id="fibers" type="range" min="0" max="55" value="30"></label>
+<label>Disks <output id="disksOut"></output><input id="disks" type="range" min="15" max="300" value="180"></label>
+<label>Fiber aspect ratio <output id="aspectOut"></output><input id="aspect" type="range" min="3" max="9" value="6"></label>
+<label>Bending stiffness κ <output id="bendingOut"></output><input id="bending" type="range" min="0" max="60" step="2" value="8"></label>
+<label>Friction μ <output id="frictionOut"></output><input id="friction" type="range" min="0" max="1.2" step="0.05" value="0.6"></label>
+<label>Shear displacement K <output id="KOut"></output><input id="K" type="range" min="0" max="1.5" step="0.05" value="0.7"></label>
+<label>Simulation speed<select id="speed"><option value="4">Normal</option><option value="10" selected>Fast</option><option value="20">Very fast</option></select></label>
+<p class="hint">Changing a parameter requires a new run or Restart same seed. Fibers are five-node chains. Different fibers are never permanently linked.</p>
+<button id="export">Export data CSV</button></aside></div></main><script type="module">
+import {init,step,mixing,clusterStats,structureFactor,contactSurvival} from './physics.mjs';
+const $=id=>document.getElementById(id),c=$('scene'),ctx=c.getContext('2d'),chart=$('chart'),sfchart=$('sfchart');
+let seed=17,currentSeed=17,sim,playing=true,history=[],sfAccum=[],sfCount=0,nextSample=0;
+const keys=['fibers','disks','aspect','bending','friction','K'];
+const params=()=>Object.fromEntries(keys.map(k=>[k,+$(k).value]));
+function recordSample(){const cs=clusterStats(sim),surv=contactSurvival(sim);
+ history.push([sim.t,mixing(sim),cs.largestFraction,cs.meanDegree,surv.active,surv.meanAge,surv.meanFinished]);
+ if(sim.t>=10){const f=structureFactor(sim);if(!sfAccum.length)sfAccum=f.map(d=>({k:d.k,sum:0}));for(let i=0;i<f.length;i++)sfAccum[i].sum+=f[i].S;sfCount++;}
+ nextSample=sim.t+.5;
+}
+function reset(reuse=false){if(!reuse)currentSeed=seed++;sim=init({...params(),initial:$('initial').value,seed:currentSeed});history=[];sfAccum=[];sfCount=0;nextSample=0;recordSample();}
+for(const k of keys){const update=()=>$(k+'Out').textContent=$(k).value;$(k).addEventListener('input',update);update();}
+reset();
+$('run').onclick=()=>{playing=!playing;$('run').textContent=playing?'Pause':'Resume';};
+$('reset').onclick=()=>reset();
+$('repeat').onclick=()=>reset(true);
+$('export').onclick=()=>{const csv='time,disk_variance,largest_fiber_cluster_fraction,mean_fiber_degree,active_interfiber_contacts,mean_active_contact_age,mean_finished_contact_age\n'+history.map(d=>d.join(',')).join('\n')+'\n\nk,mean_Sdd\n'+sfAccum.map(d=>[d.k,sfCount?d.sum/sfCount:0].join(',')).join('\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const a=document.createElement('a');a.href=url;a.download='flexible_fiber_statistics.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+function draw(){ctx.clearRect(0,0,c.width,c.height);const sx=c.width/sim.W,sy=c.height/sim.H;ctx.save();ctx.beginPath();ctx.rect(0,0,c.width,c.height);ctx.clip();
+ for(const fiber of sim.fibers){const points=fiber.ids.map(i=>sim.particles[i]);for(const ox of [-sim.W,0,sim.W])for(const oy of [-sim.H,0,sim.H]){
+  ctx.beginPath();ctx.lineWidth=9;ctx.strokeStyle='#6db58c';ctx.lineCap='round';ctx.lineJoin='round';
+  const first=points[0];ctx.moveTo((first.x+ox)*sx,(first.y+oy)*sy);
+  let prev=first;
+  for(let j=1;j<points.length;j++){const q=points[j];const dx=q.x-prev.x-Math.round((q.x-prev.x)/sim.W)*sim.W,dy=q.y-prev.y-Math.round((q.y-prev.y)/sim.H)*sim.H;
+   let prevX=j===1?first.x:undefined;
+   // accumulate unwrapped coordinates relative to first node
+   if(j===1){fiber._drawX=first.x;fiber._drawY=first.y;}
+   fiber._drawX+=dx;fiber._drawY+=dy;ctx.lineTo((fiber._drawX+ox)*sx,(fiber._drawY+oy)*sy);prev=q;
+  }ctx.stroke();
+ }}
+ for(const o of sim.particles){if(o.type!=='disk')continue;for(const ox of [-sim.W,0,sim.W])for(const oy of [-sim.H,0,sim.H]){ctx.fillStyle='#e4b48f';ctx.beginPath();ctx.arc((o.x+ox)*sx,(o.y+oy)*sy,o.r*sx,0,2*Math.PI);ctx.fill();}}
+ ctx.restore();
+ $('clock').textContent='t = '+sim.t.toFixed(2);$('mix').textContent='Variance = '+mixing(sim).toFixed(3);const cs=clusterStats(sim),sv=contactSurvival(sim);$('contacts').textContent='Largest cluster = '+(100*cs.largestFraction).toFixed(0)+'% | Active inter-fiber contacts = '+sv.active;
+ function plot(canvas,data,title,ref=null){const q=canvas.getContext('2d'),w=canvas.width,h=canvas.height,L=46,R=w-12,T=26,B=h-24;q.clearRect(0,0,w,h);q.strokeStyle='#71849b';q.beginPath();q.moveTo(L,T);q.lineTo(L,B);q.lineTo(R,B);q.stroke();q.fillStyle='#c5d7e8';q.font='13px system-ui';q.fillText(title,L+6,17);if(!data.length)return;const xmin=Math.min(...data.map(d=>d[0])),xmax=Math.max(xmin+1e-6,...data.map(d=>d[0]));const ymax=Math.max(1,ref||0,...data.flatMap(d=>d.slice(1)));const X=v=>L+(v-xmin)/(xmax-xmin)*(R-L),Y=v=>B-v/ymax*(B-T);if(ref!==null){q.setLineDash([4,4]);q.strokeStyle='#8696a9';q.beginPath();q.moveTo(L,Y(ref));q.lineTo(R,Y(ref));q.stroke();q.setLineDash([]);}for(let j=1;j<data[0].length;j++){q.strokeStyle=['','#75c9a4','#f1b878','#8db9ed'][j]||'#fff';q.lineWidth=2;q.beginPath();data.forEach((d,i)=>i?q.lineTo(X(d[0]),Y(d[j])):q.moveTo(X(d[0]),Y(d[j])));q.stroke();}q.fillStyle='#b8c8d9';q.fillText(ymax.toFixed(2),2,T+6);q.fillText(xmax.toFixed(1),R-32,B+16);}
+ plot(chart,history.map(d=>[d[0],d[1],d[2],d[5]]),'Green: variance | orange: cluster fraction | blue: contact age');
+ plot(sfchart,sfCount?sfAccum.map(d=>[d.k,d.sum/sfCount]):[],'Time-averaged disk Sdd(k), reference = 1',1);
+ $('averageStatus').textContent='Samples after t=10: '+sfCount+' | fibers: '+sim.fibers.length+' | disks: '+sim.particles.filter(a=>a.type==='disk').length+' | mean completed contact lifetime: '+sv.meanFinished.toFixed(2);
 }
 function loop(){if(playing){step(sim,+$('speed').value);if(sim.t>=nextSample)recordSample();}draw();requestAnimationFrame(loop);}loop();
 </script></body></html>
