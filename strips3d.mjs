@@ -41,7 +41,7 @@ function makeStrip(s,index,center,frame){
  for(let i=0;i<C;i++){const row=[];for(let j=0;j<R;j++){
   const a=(i/(C-1)-.5)*length,b=(j/(R-1)-.5)*width;
   const x=center.map((v,k)=>v+a*frame[0][k]+b*frame[1][k]);
-  row.push(vertices.length);vertices.push({p:x,v:[0,0,0],f:[0,0,0],m:.22,strip:index});
+  row.push(vertices.length);vertices.push({p:x,v:[0,0,0],f:[0,0,0],m:1.6*length*width/(C*R),strip:index});
  }ids.push(row);}
  function spring(a,b,k=1){const d=norm(sub(vertices[a].p,vertices[b].p));springs.push({a,b,rest:d,k});}
  function bend(indices,coef,k=1){bends.push({indices,coef,k});}
