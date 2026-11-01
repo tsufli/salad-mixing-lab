@@ -104,3 +104,39 @@ test('the largest contact cluster is empty for no strips, and isolated for disco
  assert.equal(cluster3d(b).largest,1);
  assert.equal(cluster3d(b).fraction,.25);
 });
+
+test('dense packing initializes all requested strips rather than silently dropping some',()=>{
+ const s=init3d({strips:40,box:5.5,packingSteps:24,seed:17});
+ assert.equal(s.strips.length,40);
+ assert.equal(s.vertices.length,40*defaults3d.cols*defaults3d.rows);
+ assert.ok(s.preparing);assert.ok(s.p.box>5.5);
+ assert.equal(s.prepTargetBox,5.5);
+});
+
+test('compression preserves mesh reference lengths and switches to stirring t=0',()=>{
+ const s=init3d({strips:8,box:5.5,packingSteps:25});
+ const start=s.p.box,rests=s.springs.map(e=>e.rest);
+ step3d(s,12);
+ assert.ok(s.preparing);
+ assert.ok(s.p.box<start&&s.p.box>5.5);
+ assert.equal(s.t,0);
+ assert.equal(s.prepStep,12);
+ assert.deepEqual(s.springs.map(e=>e.rest),rests);
+ step3d(s,13);
+ assert.equal(s.preparing,false);
+ assert.ok(approximately(s.p.box,5.5));
+ assert.equal(s.t,0);
+ step3d(s,10);
+ assert.ok(approximately(s.t,10*s.p.dt,1e-8));
+ assert.ok(s.vertices.every(v=>finite3(v.p)&&finite3(v.v)));
+ const d=diagnostics3d(s);assert.equal(d.prepProgress,1);
+ assert.ok(d.prepMaxOverlap>=0&&Number.isFinite(d.prepMaxOverlap));
+});
+
+test('packing disabled retains original fixed-box initialization for control',()=>{
+ const s=init3d({strips:5,box:7,packing:false});
+ assert.equal(s.preparing,false);
+ assert.equal(s.p.box,7);
+ step3d(s,3);
+ assert.ok(s.t>0);
+});
