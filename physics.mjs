@@ -9,9 +9,19 @@ export function contactGeometry(a,b){let pa,pb;if(a.type==='disk'&&b.type==='dis
 export function pairForce(a,b,p){const c=contactGeometry(a,b);if(c.overlap<=0)return false;const ra={x:c.pa.x-a.x,y:c.pa.y-a.y},rb={x:c.pb.x-b.x,y:c.pb.y-b.y},va={x:a.vx-a.omega*ra.y,y:a.vy+a.omega*ra.x},vb={x:b.vx-b.omega*rb.y,y:b.vy+b.omega*rb.x};const dvx=vb.x-va.x,dvy=vb.y-va.y,vn=dvx*c.nx+dvy*c.ny,fn=Math.max(0,p.stiffness*c.overlap-p.damping*vn),tx=-c.ny,ty=c.nx,vt=dvx*tx+dvy*ty,ft=-p.friction*fn*Math.tanh(vt/.06),fx=fn*c.nx+ft*tx,fy=fn*c.ny+ft*ty;a.fx-=fx;a.fy-=fy;b.fx+=fx;b.fy+=fy;a.tau-=ra.x*fy-ra.y*fx;b.tau+=rb.x*fy-rb.y*fx;return true;}
 export function drivingVelocity(x,y,t,p,W=12,H=8){
   if(p.driveMode==='rotation'){const scale=Math.sin(t*1.6)*p.drive;return {x:-scale*(y-H/2),y:scale*(x-W/2)};}
+  // Two alternating incompressible cellular flows from a streamfunction.
+  // psi=A sin^2(pi*x/W) sin^2(pi*y/H) * sin(2*pi*y/H) (or x/W).
+  // Normal velocity vanishes at walls, unlike unbounded shear.
+  const X=Math.PI*x/W,Y=Math.PI*y/H,sx=Math.sin(X),sy=Math.sin(Y);
+  const B=sx*sx*sy*sy;
+  const Bx=2*sx*Math.cos(X)*(Math.PI/W)*sy*sy;
+  const By=2*sy*Math.cos(Y)*(Math.PI/H)*sx*sx;
   const phase=Math.floor(t/(p.switchTime||2.5))%2;
-  if(phase===0)return {x:p.drive*2*Math.sin(2*Math.PI*y/H),y:0};
-  return {x:0,y:p.drive*2*Math.sin(2*Math.PI*x/W)};
+  const f=phase===0?Math.sin(2*Y):Math.sin(2*X);
+  const fx=phase===0?0:2*Math.PI/W*Math.cos(2*X);
+  const fy=phase===0?2*Math.PI/H*Math.cos(2*Y):0;
+  const A=8*p.drive;
+  return {x:A*(By*f+B*fy),y:-A*(Bx*f+B*fx)};
 }
 export function step(s,n=1){const{items,p,W,H}=s;for(let z=0;z<n;z++){s.contacts=0;for(const o of items){const v=drivingVelocity(o.x,o.y,s.t,p,W,H);
 o.fx=p.drag*o.m*(v.x-o.vx);o.fy=p.drag*o.m*(v.y-o.vy);
