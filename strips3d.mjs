@@ -147,7 +147,7 @@ function collisionCandidates(s){
  const key=(a,b,c)=>(a*n+b)*n+c;
  for(let i=0;i<triangles.length;i++){
   const t=triangles[i],P=triPoints(s,t),c=center3(P),r=radius3(P,c),
-  q=c.map(x=>Math.floor(mod(x,L)/cell)%n);info[i]={c,r,q};
+  q=c.map(x=>Math.floor(mod(x,L)/cell)%n),lo=[0,1,2].map(k=>Math.min(...P.map(v=>v[k]))),hi=[0,1,2].map(k=>Math.max(...P.map(v=>v[k])));info[i]={c,r,q,lo,hi};
   const id=key(...q);if(!hash.has(id))hash.set(id,[]);hash.get(id).push(i);
  }
  const out=[];
@@ -160,7 +160,11 @@ function collisionCandidates(s){
     const b=triangles[j];
     if(a.strip===b.strip&&Math.abs(a.i-b.i)<=1)continue;
     const w=info[j],dist=Math.hypot(...v.c.map((x,k)=>x-w.c[k]-Math.round((x-w.c[k])/L)*L));
-    if(dist<=v.r+w.r+p.thickness)out.push([i,j]);
+    if(dist>v.r+w.r+p.thickness)continue;
+    const shift=v.c.map((x,k)=>Math.round((x-w.c[k])/L)*L);
+    let nearby=true;
+    for(let k=0;k<3;k++)if(v.lo[k]-(w.hi[k]+shift[k])>p.thickness||(w.lo[k]+shift[k])-v.hi[k]>p.thickness){nearby=false;break;}
+    if(nearby)out.push([i,j]);
    }
   }
  }
