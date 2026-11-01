@@ -44,12 +44,14 @@ button:hover{filter:brightness(1.07)}
 <canvas id="scene" width="960" height="650" aria-label="3D perspective rendering of flexible strips"></canvas>
 <div class="toolbar"><button id="view" class="secondary">Reset view</button><span class="hint">Drag to orbit · scroll or pinch to zoom · translucent faces show over-and-under geometry</span></div>
 <div class="stats">
-<div class="stat"><b id="time">0.00</b><small>Simulation time</small></div>
+<div class="stat"><b id="phase">Preparing</b><small>Stage / progress</small></div>
+<div class="stat"><b id="time">0.00</b><small>Stirring time</small></div>
 <div class="stat"><b id="cluster">—</b><small>Largest contact cluster</small></div>
 <div class="stat"><b id="links">0</b><small>Inter-strip contact links</small></div>
+<div class="stat"><b id="density">—</b><small>Estimated volume fraction</small></div>
 <div class="stat"><b id="coherence">—</b><small>Rigid-like motion score</small></div>
 </div>
-<p class="hint" id="message">Initializing 3D physics…</p>
+<p class="hint" id="message" role="status">Initializing 3D physics…</p>
 <section class="theory" id="model">
 <h2>Model and equations of motion</h2>
 <p>This is an <strong>exploratory 3D discrete elastic-strip model</strong> with no lentils. Each strip is a triangulated rectangular material surface (7 × 3 vertices by default). Different strips have no permanent bonds. The elastic surface can bend and twist; interpenetration is resisted by finite-thickness, two-sided, soft surface contacts. These are <em>penalty contacts</em>, not an exact guarantee against numerical crossing.</p>
@@ -100,8 +102,14 @@ P_\infty(t)=\frac{N_{\mathrm{largest\ connected\ component}}}{N},
 Q(t)=1-\frac{\sum_{i\in C}\lVert\mathbf v'_i-\boldsymbol\omega_*\times\mathbf r'_i\rVert^2}{\sum_{i\in C}\lVert\mathbf v'_i\rVert^2}.
 \]</div>
 <p>The contact graph connects strips with at least one touching triangle pair. Primes mean that cluster translation has been subtracted; \(\boldsymbol\omega_*\) is the best-fit common angular velocity. \(Q\) measures <em>instantaneous rigid-like velocity coherence</em> of strip centers and is undefined for clusters of fewer than three strips. This is not a proof of rigidity, and periodic unwrapping is approximate for very large clusters. We also measure uninterrupted inter-strip contact-pair ages.</p>
+<h3>Controlled packing before stirring</h3>
+<p>Instead of removing strips that cannot fit in a dense random placement, all requested strips are first initialized in a larger, dilute periodic cube. Over a chosen number of preparation steps the box contracts smoothly from \(L_0\) to the desired \(L_f\), translating each strip's center without scaling its internal mesh. The strips relax through elastic and frictional forces with stirring disabled. After compression finishes, the alternating sine drive begins and the plotted stirring time starts at \(t=0\).</p>
+<div class="math-display">\[
+L(s)=L_0\left(\frac{L_f}{L_0}\right)^{3s^2-2s^3},\qquad s\in[0,1].
+\]</div>
+<p>Compression is a prescribed geometrical preparation protocol, <strong>not</strong> a pressure-controlled barostat or real gravity. Density is estimated using \(\phi_{\rm eff}=NLwh/L_{\rm box}^{3}\), with contact thickness as an effective \(h\). Compression can generate finite soft-contact penetration; monitor its reported maximum.</p>
 <h3>Numerical limitations</h3>
-<p>We use a periodic spatial broad phase, finite-thickness spring-dashpot triangle contacts, and semi-implicit Euler integration with \(\Delta t=0.002\). Because contact is <strong>soft</strong> and there is no continuous collision detection, tunneling or mesh crossing can still occur in difficult geometries. A real claim of topologically faithful entanglement would require collision-safe contact handling, time-step convergence and independent validation. No phase transition is assumed.</p>
+<p>We use a periodic spatial broad phase, finite-thickness spring-dashpot triangle contacts, and semi-implicit Euler integration with \(\Delta t=0.003\). Because contact is <strong>soft</strong> and there is no continuous collision detection, tunneling or mesh crossing can still occur in difficult geometries. A real claim of topologically faithful entanglement would require collision-safe contact handling, time-step convergence and independent validation. No phase transition is assumed.</p>
 </section>
 <section id="observables">
 <h2>Observables</h2>
@@ -122,8 +130,9 @@ Q(t)=1-\frac{\sum_{i\in C}\lVert\mathbf v'_i-\boldsymbol\omega_*\times\mathbf r'
 <label>Bending stiffness κ <output id="bendingOut"></output><input id="bending" type="range" min="0" max="80" step="2" value="14"></label>
 <label>Friction coefficient μ <output id="frictionOut"></output><input id="friction" type="range" min="0" max="1.5" step=".05" value=".75"></label>
 <label>3D stirring strength K <output id="KOut"></output><input id="K" type="range" min="0" max="1.3" step=".05" value=".5"></label>
-<label>Steps per worker batch<select id="batch"><option value="1">1 · frequent updates</option><option value="2" selected>2 · balanced</option><option value="4">4 · fewer updates</option></select></label>
-<p class="hint">Controls take effect when starting a new run or restarting the current seed. The 3D numerical solver runs in a separate browser worker, so higher strip counts can make physical time advance more slowly without freezing the view.</p>
+<label>Packing quality<select id="packingSteps"><option value="180">Quick (more overlap)</option><option value="420" selected>Balanced</option><option value="800">Gentle (slower)</option></select></label>
+<label>Steps per worker batch<select id="batch"><option value="2">2 · smooth updates</option><option value="6" selected>6 · balanced</option><option value="12">12 · maximum throughput</option></select></label>
+<p class="hint">Each run first packs the requested strips by smoothly compressing a dilute box. Packing progress is shown above; measurements begin after preparation. The optimized solver runs in a browser worker. More strips and higher packing quality still cost computation time.</p>
 <button id="export" class="secondary">Export statistics CSV</button>
 <p class="hint">Volume-filling network formation is a hypothesis to test. A large cluster fraction need not mean a mechanically coherent or permanently entangled object.</p>
 </aside>
@@ -134,19 +143,19 @@ const worker=new Worker('./strips3d-worker.mjs',{type:'module'});
 let topology=null,positions=null,latest=null,history=[],seedCounter=17,currentSeed=17,playing=true;
 let az=.83,el=.45,zoom=1,dragging=false,lastPointer=null,pinchDist=null;
 const fields=['strips','length','width','box','bending','friction','K'];
-const options=()=>Object.fromEntries(fields.map(k=>[k,+$(k).value]));
+const options=()=>({...Object.fromEntries(fields.map(k=>[k,+$(k).value])),packingSteps:+$('packingSteps').value});
 for(const key of fields){const fn=()=>$(key+'Out').textContent=$(key).value;$(key).addEventListener('input',fn);fn();}
 function reset(reuse=false){
  if(!reuse)currentSeed=seedCounter++;
  history=[];latest=null;positions=null;topology=null;
  worker.postMessage({cmd:'reset',params:{...options(),seed:currentSeed},autoPlay:playing});
- $('message').textContent='Initializing 3D strips and checking initial surface contacts…';
+ $('message').textContent='Placing every requested strip in a dilute periodic box…';$('phase').textContent='Initializing';$('time').textContent='0.00';
 }
 $('play').onclick=()=>{playing=!playing;worker.postMessage({cmd:playing?'play':'pause'});$('play').textContent=playing?'Pause':'Resume';};
 $('newRun').onclick=()=>reset();
 $('sameSeed').onclick=()=>reset(true);
 $('batch').onchange=()=>worker.postMessage({cmd:'batch',value:+$('batch').value});
-$('view').onclick=()=>{az=.83;el=.45;zoom=1;};
+$('view').onclick=()=>{az=.83;el=.45;zoom=1;requestDraw();};
 $('export').onclick=()=>{
  const csv='time,largest_component_fraction,velocity_coherence,interstrip_links,active_contact_mean_age,completed_contact_mean_age,max_penetration\n'+
  history.map(d=>[d.t,d.fraction,d.coherence??'',d.edges,d.meanAge,d.completedAge,d.maxOverlap].join(',')).join('\n');
@@ -155,8 +164,8 @@ $('export').onclick=()=>{
 };
 worker.onmessage=e=>{
  const m=e.data;
- if(m.type==='topology'){topology=m;latest=m.status;$('message').textContent='3D mesh: '+m.actual+' strips / '+m.vertices+' vertices / '+m.faces+' triangles'+(m.actual<m.requested?' (placement stopped early)':'')+'.';}
- if(m.type==='frame'){positions=new Float32Array(m.positions);latest=m.status;updateStats();}
+ if(m.type==='topology'){topology=m;latest=m.status;$('message').textContent='3D mesh: '+m.actual+' / '+m.requested+' strips · '+m.vertices+' vertices · '+m.faces+' triangles.';requestDraw();}
+ if(m.type==='frame'){positions=new Float32Array(m.positions);latest=m.status;updateStats();requestDraw();}
  if(m.type==='sample'){history.push(m.data);if(history.length>1500)history.shift();plotAll();}
  if(m.type==='error'){$('message').textContent='Simulation error: '+m.message;playing=false;$('play').textContent='Resume';}
 };
@@ -167,6 +176,20 @@ function updateStats(){
  $('cluster').textContent=(100*latest.fraction).toFixed(0)+'%';
  $('links').textContent=latest.edges;
  $('coherence').textContent=latest.coherence===null?'—':latest.coherence.toFixed(2);
+ if(topology){
+  const count=topology.actual,vol=count*options().length*options().width*.16,
+        phi=vol/Math.pow(latest.box,3);
+  $('density').textContent=(100*phi).toFixed(1)+'%';
+ }
+ if(latest.preparing){
+  $('phase').textContent='Packing '+(100*latest.prepProgress).toFixed(0)+'%';
+  $('message').textContent='Preparing: box side '+latest.box.toFixed(2)+' → '+latest.targetBox.toFixed(2)+
+   ' · current contacts '+latest.contacts+' · maximum penetration so far '+latest.prepMaxOverlap.toFixed(3)+'. Stirring starts at t = 0.';
+ }else{
+  $('phase').textContent='Stirring';
+  $('message').textContent='Prepared '+(topology?.actual??'—')+' strips; packing maximum penetration '+
+   latest.prepMaxOverlap.toFixed(3)+' · current maximum penetration '+latest.maxOverlap.toFixed(3)+'.';
+ }
 }
 function plot(canvas,series,title,lines,reference=null){
  const g=canvas.getContext('2d'),W=canvas.width,H=canvas.height,L=52,R=W-18,T=28,B=H-29;
@@ -196,15 +219,15 @@ c.addEventListener('pointermove',e=>{
  if(!pointers.has(e.pointerId))return;
  const old=pointers.get(e.pointerId);pointers.set(e.pointerId,[e.clientX,e.clientY]);
  if(pointers.size>=2){const pts=[...pointers.values()],dist=Math.hypot(pts[0][0]-pts[1][0],pts[0][1]-pts[1][1]);
-  if(pinchPrevious!==null&&pinchPrevious>0)zoom=Math.max(.5,Math.min(3,zoom*dist/pinchPrevious));
+  if(pinchPrevious!==null&&pinchPrevious>0)zoom=Math.max(.5,Math.min(3,zoom*dist/pinchPrevious));requestDraw();
   pinchPrevious=dist;return;
  }
- az+=(e.clientX-old[0])*.008;el=Math.max(-1.5,Math.min(1.5,el-(e.clientY-old[1])*.008));
+ az+=(e.clientX-old[0])*.008;el=Math.max(-1.5,Math.min(1.5,el-(e.clientY-old[1])*.008));requestDraw();
 });
 function releasePointer(e){pointers.delete(e.pointerId);pinchPrevious=null;lastPointer=null;}
 c.addEventListener('pointerup',releasePointer);
 c.addEventListener('pointercancel',releasePointer);
-c.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.5,Math.min(3,zoom*Math.exp(-e.deltaY*.001)));},{passive:false});
+c.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.5,Math.min(3,zoom*Math.exp(-e.deltaY*.001)));requestDraw();},{passive:false});
 function project(p,L){
  const x=p[0]-L/2,y=p[1]-L/2,z=p[2]-L/2,ca=Math.cos(az),sa=Math.sin(az),ce=Math.cos(el),se=Math.sin(el);
  const X=-sa*x+ca*y,Y=-se*ca*x-se*sa*y+ce*z,D=ce*ca*x+ce*sa*y+se*z;
@@ -214,7 +237,7 @@ function project(p,L){
 function render(){
  ctx.clearRect(0,0,c.width,c.height);
  if(!topology||!positions){ctx.fillStyle='#adbed2';ctx.font='19px system-ui';ctx.fillText('Preparing 3D mesh…',35,45);return;}
- const L=topology.box,projected=Array.from({length:positions.length/3},(_,i)=>project([positions[3*i],positions[3*i+1],positions[3*i+2]],L));
+ const L=latest?.box??topology.box,projected=Array.from({length:positions.length/3},(_,i)=>project([positions[3*i],positions[3*i+1],positions[3*i+2]],L));
  // Draw the periodic cube as a faint wire frame.
  const corners=[];for(const x of [0,L])for(const y of [0,L])for(const z of [0,L])corners.push({raw:[x,y,z],view:project([x,y,z],L)});
  ctx.strokeStyle='#465d75';ctx.lineWidth=1;ctx.setLineDash([6,6]);
@@ -238,7 +261,9 @@ function render(){
   ctx.lineWidth=.7;ctx.strokeStyle='hsla('+hue+',65%,83%,.35)';ctx.stroke();
  }
 }
-function frame(){render();requestAnimationFrame(frame);}frame();
+let drawQueued=false;
+function requestDraw(){if(drawQueued)return;drawQueued=true;requestAnimationFrame(()=>{drawQueued=false;render();});}
+requestDraw();
 reset();
 </script>
 </body></html>
