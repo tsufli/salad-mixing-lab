@@ -2,7 +2,7 @@
 // Each strip is a triangulated elastic spring-grid surface. Contact uses closest
 // triangle features (vertex-face and edge-edge), with persistent tangential springs.
 export const defaults3d={
- strips:22,length:3.2,width:.9,cols:7,rows:3,box:8,bending:14,
+ strips:22,length:3.2,width:.9,cols:7,rows:3,box:7,bending:14,
  friction:.75,K:.5,tau:2.5,dt:.002,seed:17,
  spring:280,normalStiffness:650,normalDamp:10,tangentialStiffness:110,
  tangentialDamp:1.5,drag:7,thickness:.16
