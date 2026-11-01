@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3D Strip Network | Salad Mixing Lab</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#e7eef7;background:#0d1421}
+*{box-sizing:border-box}body{margin:0}main{max-width:1260px;margin:auto;padding:24px}
+h1{margin:13px 0 5px}h2{font-size:1.33rem;margin-top:22px}h3{font-size:1rem;margin:18px 0 8px}
+p{color:#b5c4d6;line-height:1.53}.muted,.hint{font-size:.83rem;color:#9dafc4;line-height:1.5}
+nav{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid #35475d;padding:0 0 13px}
+nav a{color:#c2d5e5;text-decoration:none;padding:9px 14px;border-radius:9px;background:#19263a}
+nav a[aria-current="page"]{color:#0a2318;background:#70b99c;font-weight:700}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:20px}
+@media(max-width:830px){.layout{grid-template-columns:1fr}main{padding:12px}}
+canvas{display:block;width:100%;height:auto;background:#152237;border:1px solid #40516a;border-radius:12px}
+#scene{touch-action:none;cursor:grab}#scene:active{cursor:grabbing}
+aside{background:#19263a;border-radius:12px;padding:16px;align-self:start}
+label{display:block;margin:13px 0;font-size:.9rem}
+input,select{width:100%;accent-color:#70b99c}
+select{padding:8px;background:#24374f;color:#e7eef7;border:1px solid #586d82;border-radius:5px}
+button{background:#70b99c;border:0;border-radius:8px;padding:10px 14px;margin:5px 4px 5px 0;font-weight:700;cursor:pointer;color:#0b211a}
+button.secondary{background:#33495f;color:#d6e8f0}
+button:hover{filter:brightness(1.07)}
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0}
+.stat{background:#1b2a3e;border:1px solid #32475e;border-radius:9px;padding:11px;min-width:130px;flex:1}
+.stat b{display:block;font-size:1.25rem;font-variant-numeric:tabular-nums;color:#e6f9ee}
+.stat small{color:#a8bacc}
+.theory{background:#19263a;border:1px solid #40516a;border-radius:12px;padding:18px;margin:20px 0;max-width:100%;overflow:hidden}
+.theory h2{margin-top:0}.theory p{line-height:1.6}
+.math-display{overflow-x:auto;padding:8px 4px;margin:13px 0 18px;color:#f1f6fb;font-size:17px}
+.math-display mjx-container[display="true"]{margin:.5em 0!important}
+.figure-note{margin:7px 0 16px}.toolbar{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+#message{color:#9ec8b4}strong{color:#e8f5f0}
+</style>
+<script>window.MathJax={tex:{displayMath:[['\\[','\\]']],inlineMath:[['\\(','\\)']]},options:{skipHtmlTags:['script','noscript','style','textarea','pre','code']}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head><body><main>
+<nav aria-label="Simulation models">
+<a href="./index.html">2D flexible fibers + disks</a>
+<a href="./strips3d.html" aria-current="page">3D flexible strips</a>
+</nav>
+<h1>3D Flexible Strip Network</h1>
+<p>Nonadhesive triangulated strips in a periodic 3D box. Explore whether geometric contact, bending and static friction produce a long-lived collective network under three alternating shears.</p>
+<div class="layout"><section>
+<canvas id="scene" width="960" height="650" aria-label="3D perspective rendering of flexible strips"></canvas>
+<div class="toolbar"><button id="view" class="secondary">Reset view</button><span class="hint">Drag to orbit · scroll or pinch to zoom · translucent faces show over-and-under geometry</span></div>
+<div class="stats">
+<div class="stat"><b id="time">0.00</b><small>Simulation time</small></div>
+<div class="stat"><b id="cluster">—</b><small>Largest contact cluster</small></div>
+<div class="stat"><b id="links">0</b><small>Inter-strip contact links</small></div>
+<div class="stat"><b id="coherence">—</b><small>Rigid-like motion score</small></div>
+</div>
+<p class="hint" id="message">Initializing 3D physics…</p>
+<section class="theory" id="model">
+<h2>Model and equations of motion</h2>
+<p>This is an <strong>exploratory 3D discrete elastic-strip model</strong> with no lentils. Each strip is a triangulated rectangular material surface (7 × 3 vertices by default). Different strips have no permanent bonds. The elastic surface can bend and twist; interpenetration is resisted by finite-thickness, two-sided, soft surface contacts. These are <em>penalty contacts</em>, not an exact guarantee against numerical crossing.</p>
+<h3>Elastic strip</h3>
+<div class="math-display">\[
+E_{\mathrm{el}} = E_s+E_b,\qquad
+E_s=\frac{k_s}{2}\sum_{(a,b)\in\mathcal E} w_{ab}\bigl(\lVert\mathbf r_b-\mathbf r_a\rVert-\ell^0_{ab}\bigr)^2.
+\]</div>
+<div class="math-display">\[
+E_b=\frac{\kappa}{2}\sum_{\alpha}w_\alpha
+\left\lVert\sum_{a\in\alpha}c_{\alpha a}\mathbf r_a\right\rVert^2.
+\]</div>
+<p>The stretching energy acts on longitudinal, transverse and diagonal mesh edges. The bending penalty uses longitudinal and transverse second differences, as well as mixed differences that penalize twist. The model is invariant to rigid translations and rotations of a flat strip, but is a <strong>coarse spring-grid approximation</strong>, not a calibrated Kirchhoff–Love shell or a full dihedral-angle shell discretization.</p>
+<h3>Three-dimensional stirring</h3>
+<div class="math-display">\[
+\mathbf u(\mathbf r,t)=
+\begin{cases}
+\left(\dfrac{LK}{\tau}\sin\dfrac{2\pi y}{L},0,0\right),& 0\leq t\bmod 3\tau\lt\tau,\\[4pt]
+\left(0,\dfrac{LK}{\tau}\sin\dfrac{2\pi z}{L},0\right),& \tau\leq t\bmod 3\tau\lt2\tau,\\[4pt]
+\left(0,0,\dfrac{LK}{\tau}\sin\dfrac{2\pi x}{L}\right),& 2\tau\leq t\bmod 3\tau\lt3\tau.
+\end{cases}
+\]</div>
+<p>Each phase is divergence-free, and the cube is periodic in all three directions, with \(L=8\) and \(\tau=2.5\). The field is prescribed: the strips do not feed back onto a fluid. The control \(K\) is the normalized tracer displacement during one shear phase.</p>
+<h3>Vertex dynamics</h3>
+<div class="math-display">\[
+m_a\ddot{\mathbf r}_a=
+-\nabla_a E_{\mathrm{el}}
++\sum_{c}\mathbf F_{a,c}^{\mathrm{contact}}
++\gamma m_a\left[\mathbf u(\mathbf r_a,t)-\dot{\mathbf r}_a\right].
+\]</div>
+<p>Contact forces are distributed to the three vertices of each contacting triangle using barycentric weights. We include inter-strip contact and nonlocal self-contact. Initial configurations are rejected if strips have excessively close surfaces.</p>
+<h3>Frictional surface contact</h3>
+<div class="math-display">\[
+\begin{aligned}
+\delta&=\max(0,h-d_{\triangle\triangle}),\\
+F_n&=\max(0,k_n\delta-\eta_n v_n),\\
+\boldsymbol\xi_t^{\,n+1}&=\operatorname{proj}_{\mathrm{tan}}
+\left(\boldsymbol\xi_t^{\,n}+\Delta t\,\mathbf v_t\right),\\
+\mathbf F_t^{\mathrm{trial}}&=-k_t\boldsymbol\xi_t-\eta_t\mathbf v_t,\qquad
+\lVert\mathbf F_t\rVert\leq\mu F_n.
+\end{aligned}
+\]</div>
+<p>The closest points are calculated using vertex–triangle and edge–edge candidates in 3D, with minimum-image periodicity. Tangential displacement history is stored for each contacting triangle pair and reset on separation. The Coulomb cap allows sliding. This does not introduce artificial adhesion or inter-strip bonds.</p>
+<h3>Network observables</h3>
+<div class="math-display">\[
+P_\infty(t)=\frac{N_{\mathrm{largest\ connected\ component}}}{N},
+\qquad
+Q(t)=1-\frac{\sum_{i\in C}\lVert\mathbf v'_i-\boldsymbol\omega_*\times\mathbf r'_i\rVert^2}{\sum_{i\in C}\lVert\mathbf v'_i\rVert^2}.
+\]</div>
+<p>The contact graph connects strips with at least one touching triangle pair. Primes mean that cluster translation has been subtracted; \(\boldsymbol\omega_*\) is the best-fit common angular velocity. \(Q\) measures <em>instantaneous rigid-like velocity coherence</em> of strip centers and is undefined for clusters of fewer than three strips. This is not a proof of rigidity, and periodic unwrapping is approximate for very large clusters. We also measure uninterrupted inter-strip contact-pair ages.</p>
+<h3>Numerical limitations</h3>
+<p>We use a periodic spatial broad phase, finite-thickness spring-dashpot triangle contacts, and semi-implicit Euler integration with \(\Delta t=0.002\). Because contact is <strong>soft</strong> and there is no continuous collision detection, tunneling or mesh crossing can still occur in difficult geometries. A real claim of topologically faithful entanglement would require collision-safe contact handling, time-step convergence and independent validation. No phase transition is assumed.</p>
+</section>
+<section id="observables">
+<h2>Observables</h2>
+<h3>Connectivity and motion coherence</h3>
+<canvas id="clusterChart" width="960" height="220"></canvas>
+<p class="hint figure-note"><span style="color:#75c9a4">Green</span>: fraction of strips in the largest connected component. <span style="color:#83b5e9">Blue</span>: rigid-like motion score \(Q\), shown only when a cluster contains at least three strips.</p>
+<h3>Contact persistence</h3>
+<canvas id="ageChart" width="960" height="220"></canvas>
+<p class="hint figure-note"><span style="color:#f1b878">Orange</span>: mean age of active inter-strip links. <span style="color:#75c9a4">Green</span>: mean duration of completed links. The latter is a cumulative statistic.</p>
+</section>
+</section>
+<aside>
+<div class="toolbar"><button id="play">Pause</button><button id="newRun">New run</button><button id="sameSeed" class="secondary">Restart same seed</button></div>
+<label>Number of strips <output id="stripsOut"></output><input id="strips" type="range" min="6" max="40" step="2" value="22"></label>
+<label>Strip length <output id="lengthOut"></output><input id="length" type="range" min="1.8" max="3.8" step=".2" value="3.2"></label>
+<label>Strip width <output id="widthOut"></output><input id="width" type="range" min=".4" max="1.3" step=".1" value=".9"></label>
+<label>Bending stiffness κ <output id="bendingOut"></output><input id="bending" type="range" min="0" max="80" step="2" value="14"></label>
+<label>Friction coefficient μ <output id="frictionOut"></output><input id="friction" type="range" min="0" max="1.5" step=".05" value=".75"></label>
+<label>3D stirring strength K <output id="KOut"></output><input id="K" type="range" min="0" max="1.3" step=".05" value=".5"></label>
+<label>Steps per worker batch<select id="batch"><option value="1">1 · frequent updates</option><option value="2" selected>2 · balanced</option><option value="4">4 · fewer updates</option></select></label>
+<p class="hint">Controls take effect when starting a new run or restarting the current seed. The 3D numerical solver runs in a separate browser worker, so higher strip counts can make physical time advance more slowly without freezing the view.</p>
+<button id="export" class="secondary">Export statistics CSV</button>
+<p class="hint">Volume-filling network formation is a hypothesis to test. A large cluster fraction need not mean a mechanically coherent or permanently entangled object.</p>
+</aside>
+</div></main>
+<script type="module">
+const $=id=>document.getElementById(id),c=$('scene'),ctx=c.getContext('2d');
+const worker=new Worker('./strips3d-worker.mjs',{type:'module'});
+let topology=null,positions=null,latest=null,history=[],seedCounter=17,currentSeed=17,playing=true;
+let az=.83,el=.45,zoom=1,dragging=false,lastPointer=null,pinchDist=null;
+const fields=['strips','length','width','bending','friction','K'];
+const options=()=>Object.fromEntries(fields.map(k=>[k,+$(k).value]));
+for(const key of fields){const fn=()=>$(key+'Out').textContent=$(key).value;$(key).addEventListener('input',fn);fn();}
+function reset(reuse=false){
+ if(!reuse)currentSeed=seedCounter++;
+ history=[];latest=null;positions=null;topology=null;
+ worker.postMessage({cmd:'reset',params:{...options(),seed:currentSeed},autoPlay:playing});
+ $('message').textContent='Initializing 3D strips and checking initial surface contacts…';
+}
+$('play').onclick=()=>{playing=!playing;worker.postMessage({cmd:playing?'play':'pause'});$('play').textContent=playing?'Pause':'Resume';};
+$('newRun').onclick=()=>reset();
+$('sameSeed').onclick=()=>reset(true);
+$('batch').onchange=()=>worker.postMessage({cmd:'batch',value:+$('batch').value});
+$('view').onclick=()=>{az=.83;el=.45;zoom=1;};
+$('export').onclick=()=>{
+ const csv='time,largest_component_fraction,velocity_coherence,interstrip_links,active_contact_mean_age,completed_contact_mean_age,max_penetration\n'+
+ history.map(d=>[d.t,d.fraction,d.coherence??'',d.edges,d.meanAge,d.completedAge,d.maxOverlap].join(',')).join('\n');
+ const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'})),a=document.createElement('a');
+ a.href=url;a.download='3d_strips_network.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+worker.onmessage=e=>{
+ const m=e.data;
+ if(m.type==='topology'){topology=m;latest=m.status;$('message').textContent='3D mesh: '+m.actual+' strips / '+m.vertices+' vertices / '+m.faces+' triangles'+(m.actual<m.requested?' (placement stopped early)':'')+'.';}
+ if(m.type==='frame'){positions=new Float32Array(m.positions);latest=m.status;updateStats();}
+ if(m.type==='sample'){history.push(m.data);if(history.length>1500)history.shift();plotAll();}
+ if(m.type==='error'){$('message').textContent='Simulation error: '+m.message;playing=false;$('play').textContent='Resume';}
+};
+worker.onerror=e=>{$('message').textContent='Worker error: '+e.message;};
+function updateStats(){
+ if(!latest)return;
+ $('time').textContent=latest.t.toFixed(2);
+ $('cluster').textContent=(100*latest.fraction).toFixed(0)+'%';
+ $('links').textContent=latest.edges;
+ $('coherence').textContent=latest.coherence===null?'—':latest.coherence.toFixed(2);
+}
+function plot(canvas,series,title,lines,reference=null){
+ const g=canvas.getContext('2d'),W=canvas.width,H=canvas.height,L=52,R=W-18,T=28,B=H-29;
+ g.clearRect(0,0,W,H);g.strokeStyle='#65798e';g.lineWidth=1;g.beginPath();g.moveTo(L,T);g.lineTo(L,B);g.lineTo(R,B);g.stroke();
+ g.fillStyle='#bfcede';g.font='14px system-ui';g.fillText(title,L+7,18);
+ if(series.length===0)return;
+ let ymax=Math.max(1e-9,...series.flatMap(d=>lines.map(x=>d[x.key]).filter(x=>typeof x==='number'&&Number.isFinite(x))),reference??0);
+ if(title.includes('fraction'))ymax=1;
+ const minX=series[0].t,maxX=Math.max(minX+.01,series.at(-1).t),sx=t=>L+(t-minX)/(maxX-minX)*(R-L),sy=v=>B-(v/ymax)*(B-T);
+ if(reference!==null){g.strokeStyle='#788e9e';g.setLineDash([5,5]);g.beginPath();g.moveTo(L,sy(reference));g.lineTo(R,sy(reference));g.stroke();g.setLineDash([]);}
+ for(const line of lines){g.strokeStyle=line.color;g.lineWidth=2.2;g.beginPath();let started=false;
+  for(const d of series){const v=d[line.key];if(v===null||v===undefined||!Number.isFinite(v)){started=false;continue;}
+   if(started)g.lineTo(sx(d.t),sy(v));else g.moveTo(sx(d.t),sy(v));started=true;
+  }g.stroke();
+ }
+ g.fillStyle='#aebed0';g.fillText(ymax.toFixed(2),6,T+5);g.fillText(maxX.toFixed(1),R-30,B+18);
+}
+function plotAll(){
+ plot($('clusterChart'),history,'Largest cluster fraction & motion coherence',
+ [{key:'fraction',color:'#75c9a4'},{key:'coherence',color:'#83b5e9'}]);
+ plot($('ageChart'),history,'Inter-strip contact age',
+ [{key:'meanAge',color:'#f1b878'},{key:'completedAge',color:'#75c9a4'}]);
+}
+c.addEventListener('pointerdown',e=>{c.setPointerCapture(e.pointerId);dragging=true;lastPointer=[e.clientX,e.clientY];});
+c.addEventListener('pointermove',e=>{if(!dragging||!lastPointer)return;
+ az+=(e.clientX-lastPointer[0])*.008;el= Math.max(-1.5,Math.min(1.5,el-(e.clientY-lastPointer[1])*.008));lastPointer=[e.clientX,e.clientY];});
+c.addEventListener('pointerup',()=>{dragging=false;lastPointer=null;});
+c.addEventListener('pointercancel',()=>{dragging=false;lastPointer=null;});
+c.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.5,Math.min(3,zoom*Math.exp(-e.deltaY*.001)));},{passive:false});
+function project(p,L){
+ const x=p[0]-L/2,y=p[1]-L/2,z=p[2]-L/2,ca=Math.cos(az),sa=Math.sin(az),ce=Math.cos(el),se=Math.sin(el);
+ const X=-sa*x+ca*y,Y=-se*ca*x-se*sa*y+ce*z,D=ce*ca*x+ce*sa*y+se*z;
+ const focal=Math.max(5,18-D),factor=18/focal,scale=62*zoom*factor;
+ return{x:c.width/2+X*scale,y:c.height/2-Y*scale,depth:D};
+}
+function render(){
+ ctx.clearRect(0,0,c.width,c.height);
+ if(!topology||!positions){ctx.fillStyle='#adbed2';ctx.font='19px system-ui';ctx.fillText('Preparing 3D mesh…',35,45);return;}
+ const L=topology.box,projected=Array.from({length:positions.length/3},(_,i)=>project([positions[3*i],positions[3*i+1],positions[3*i+2]],L));
+ // Draw the periodic cube as a faint wire frame.
+ const corners=[];for(const x of [0,L])for(const y of [0,L])for(const z of [0,L])corners.push({raw:[x,y,z],view:project([x,y,z],L)});
+ ctx.strokeStyle='#465d75';ctx.lineWidth=1;ctx.setLineDash([6,6]);
+ for(let i=0;i<8;i++)for(let j=i+1;j<8;j++){
+  const a=corners[i].raw,b=corners[j].raw;if(a.filter((v,k)=>v!==b[k]).length!==1)continue;
+  ctx.beginPath();ctx.moveTo(corners[i].view.x,corners[i].view.y);ctx.lineTo(corners[j].view.x,corners[j].view.y);ctx.stroke();
+ }ctx.setLineDash([]);
+ const faces=topology.triangles.map(face=>{
+  const pts=face.ids.map(i=>projected[i]);
+  return{face,pts,depth:(pts[0].depth+pts[1].depth+pts[2].depth)/3};
+ }).sort((a,b)=>a.depth-b.depth);
+ for(const entry of faces){
+  const {face,pts}=entry;const hue=(145+face.strip*43)%360;
+  const a=face.ids[0]*3,b=face.ids[1]*3,d=face.ids[2]*3;
+  const u=[positions[b]-positions[a],positions[b+1]-positions[a+1],positions[b+2]-positions[a+2]];
+  const v=[positions[d]-positions[a],positions[d+1]-positions[a+1],positions[d+2]-positions[a+2]];
+  const n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],mag=Math.hypot(...n)||1;
+  const shade=Math.abs((n[0]*.5+n[1]*.65+n[2]*.55)/mag),light=27+shade*28;
+  ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);ctx.lineTo(pts[1].x,pts[1].y);ctx.lineTo(pts[2].x,pts[2].y);ctx.closePath();
+  ctx.fillStyle='hsla('+hue+',55%,'+light+'%,0.76)';ctx.fill();
+  ctx.lineWidth=.7;ctx.strokeStyle='hsla('+hue+',65%,83%,.35)';ctx.stroke();
+ }
+}
+function frame(){render();requestAnimationFrame(frame);}frame();
+reset();
+</script>
+</body></html>
