@@ -1,50 +1,51 @@
-# Salad Mixing Lab
+# Salad Mixing Lab — Flexible Fiber Network
 
-Interactive exploratory granular DEM model of rigid rods (leaves) mixed with small disks (lentils) under **alternating sine flow** on a 2D periodic torus.
+Interactive 2D periodic simulation of small disks and **flexible fibers**, driven by the alternating sine flow.
 
-**Website:** https://tsufli.github.io/salad-mixing-lab/
+**Live website:** https://tsufli.github.io/salad-mixing-lab/
 
-## Stirring protocol
+## Physical model
 
-Over successive half-periods of length tau=2.5, a prescribed velocity field acts on all particles:
+Each of the default 30 fibers is a five-node bead chain (total 150 nodes) with nearest-neighbor stretching stiffness `ks=400` and bending energy
 
-- First: u_x = (W K / tau) sin(2 pi y / H), u_y = 0
-- Next: u_x = 0, u_y = (H K / tau) sin(2 pi x / W)
+`E_b = (bending/2) * sum_i |r_(i-1) - 2*r_i + r_(i+1)|^2`.
 
-For passive tracers the **exact** one-period map in normalized coordinates X=x/W, Y=y/H is
+There are 180 small independent disks by default; the box dimensions are 18 × 12 with periodic boundaries. The stretching/bending energy is not calibrated to real sheet elasticity.
 
-X' = [ X + K sin(2 pi Y) ] mod 1
+All node/disk pairs on different fibers (or involving disks) interact via repulsive normal spring-dashpot contacts and a **history-dependent tangential spring** limited by Coulomb sliding friction. The tangential spring state is kept only while a particular pair remains in contact. There are no permanent bonds between different fibers. Rigid-body contact moments and continuous rod-segment exclusion are replaced by node-level contacts, a deliberate approximation.
 
-Y' = [ Y + K sin(2 pi X') ] mod 1.
+Particles obey
 
-This area-preserving map is an analytical reference, **not** the exact discrete particle dynamics.
+`m_a r_a'' = -d(E_s+E_b)/dr_a + sum_b F_ab(contact) + gamma*m_a*(u(r_a,t)-v_a)`
 
-## Discrete model
+where the elastic term is absent for disks and the imposed alternating sine field is
 
-Disks and spherocylinders interact via excluded-volume normal springs with normal damping and smooth regularized dynamic Coulomb friction. Rod–disk forces generate torques. All pair contacts use nearest periodic images, and particles wrap through periodic boundaries. Finite mass, velocity relaxation toward the flow, and rotational drag are included. **No physical walls, fluid solver, static friction history, gravity or flexibility.**
+- first half period: `u=(W*K/tau*sin(2*pi*y/H),0)`
+- second half period: `u=(0,H*K/tau*sin(2*pi*x/W))`
 
-The simulation initializes disks and rods uniformly throughout the 18 × 12 periodic box by default (36 rods, 220 disks). An optional left-half disk initialization preserves the original transient mixing experiment. Mixing is reported as the spatial variance of disk counts over a fixed 4x3 grid, normalized by their mean squared. For finite samples uniform random placement has a nonzero noise floor.
+with `tau=2.5` and `gamma=8`. Contact parameters are `kn=650, etaN=10, kt=130, etaT=2`. Numerical integration uses explicit symplectic Euler with `dt=.002` and capped particle velocities.
 
-## Run and test
+The exact passive-tracer map is a useful comparison but **not** the interacting particle solution.
 
-Open index.html using a local static HTTP server:
+## Measurements
+
+- Disk count variance on a 4×3 spatial grid.
+- Fraction of fibers in the largest *instantaneous* connected component of the interfiber contact graph.
+- Mean contact degree and current uninterrupted contact ages, with a statistic for completed contact durations.
+- Radially averaged disk static structure factor `S_dd(k)`, averaged after t >= 10.
+- CSV export, new random seeds, and same-seed restarts.
+
+Long-lived contact connections are not permanent bonds. Connectivity is not equivalent to elastic rigidity. The contact duration measurements are node-pair measures, not directly fiber–fiber lifetime survival probabilities.
+
+## Run and tests
 
 ```bash
 python3 -m http.server 8000
 node --test tests/*.test.mjs
 ```
 
-GitHub Actions runs tests and deploys Pages.
+The GitHub Pages workflow publishes on pushes to main.
 
-## Long-time observables
+## Scope and limitations
 
-- Instantaneous normalized disk-count variance on a 4 x 3 grid.
-- Largest connected **instantaneous rod contact** component, divided by total rod count, and mean rod contact degree. Contacts are based on geometric overlap, not long-lived entanglement.
-- Radially shell-averaged disk structure factor S_dd(k) = (1/N_d) |sum_j exp(i k·r_j)|^2 for reciprocal lattice wave vectors k != 0, averaged from t >= 10. A Poisson-like uniform reference has S_dd ~ 1.
-- CSV export of sampled time series and the average structure factor.
-
-The website includes the actual equations of motion below the animation and before the observables. The drag and friction laws are intentionally simplified; the appearance of clusters or peaks in S(k) is not itself evidence of a phase transition.
-
-## Computational notes
-
-The implementation uses a periodic cell-grid broad phase to avoid evaluating every particle pair. Spatially periodic images are used for contacts, and the prescribed flow remains the alternating sine protocol. More particles and longer running times still require convergence tests and multiple independent seeds.
+This is a **2D flexible bead-chain** model rather than a 3D triangulated flexible sheet model, so it cannot model overlapping leaves or genuine three-dimensional topological interlocking. It uses an imposed flow instead of coupled fluid dynamics. It has not been physically calibrated, validated against experimental mixing rates, or checked systematically for time-step and size convergence. Its numerical stability does not establish predictive realism.
