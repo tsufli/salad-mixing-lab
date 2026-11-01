@@ -2,8 +2,8 @@
 // Each strip is a triangulated elastic spring-grid surface. Contact uses closest
 // triangle features (vertex-face and edge-edge), with persistent tangential springs.
 export const defaults3d={
- strips:22,length:3.2,width:.9,cols:5,rows:3,box:7,bending:14,
- friction:.75,K:.5,tau:2.5,dt:.003,seed:17,packing:true,packingSteps:420,
+ strips:64,length:3.5,width:1.2,cols:5,rows:2,box:6.3,bending:14,
+ friction:.75,K:.5,tau:2.5,dt:.003,seed:17,packing:true,packingSteps:420,relaxSteps:240,
  spring:280,normalStiffness:650,normalDamp:10,tangentialStiffness:110,
  tangentialDamp:1.5,drag:7,thickness:.16
 };
@@ -148,8 +148,12 @@ export function init3d(options={}){
   const s={p,t:0,vertices:[],triangles:[],springs:[],bends:[],strips:[],
    memory:new Map(),pairAges:new Map(),completed:[],links:new Set(),
    maxOverlap:0,contacts:0,placementFailed:0,
-   preparing:packed&&initial>target+1e-10,prepStep:0,prepSteps:p.packingSteps,
-   prepStartBox:initial,prepTargetBox:target,prepElapsed:0,prepMaxOverlap:0};
+   preparing:packed&&initial>target+1e-10,relaxing:false,
+   stage:packed&&initial>target+1e-10?'packing':'stirring',
+   prepStep:0,prepSteps:p.packingSteps,relaxStep:0,relaxSteps:Math.max(0,p.relaxSteps||0),
+   prepStartBox:initial,prepTargetBox:target,prepElapsed:0,relaxElapsed:0,
+   prepMaxOverlap:0,relaxMaxOverlap:0,
+   packedCluster:null,relaxedCluster:null,packedLinks:null,relaxedLinks:null};
   let success=true;
   for(let i=0;i<p.strips;i++){
    let placed=false;
@@ -302,21 +306,22 @@ function recenterStrips(s){
  }
 }
 export function step3d(s,n=1){
- const{p,vertices}=s;
- for(let step=0;step<n;step++){
-  const packing=s.preparing;
+ const {p,vertices}=s;
+ for(let j=0;j<n;j++){
+  const packing=s.stage==='packing',relaxing=s.stage==='relaxing';
   if(packing)compressCenters(s);
   for(const a of vertices){
-   const u=packing?[0,0,0]:drive3d(a.p,s.t,p);
+   const u=(packing||relaxing)?[0,0,0]:drive3d(a.p,s.t,p);
    for(let k=0;k<3;k++)a.f[k]=p.drag*a.m*(u[k]-a.v[k]);
   }
   applyElastic(s);
   s.contacts=0;s.maxOverlap=0;s.links=new Set();
   const active=new Set();
-  for(const [i,j] of collisionCandidates(s)){
-   const key=i+':'+j;if(contactForce(s,s.triangles[i],s.triangles[j],key,p.dt))active.add(key);
+  for(const [i,k] of collisionCandidates(s)){
+   const key=i+':'+k;
+   if(contactForce(s,s.triangles[i],s.triangles[k],key,p.dt))active.add(key);
   }
-  for(const [key,item] of s.memory)if(!active.has(key))s.memory.delete(key);
+  for(const [key] of s.memory)if(!active.has(key))s.memory.delete(key);
   for(const [key,age] of s.pairAges)if(!s.links.has(key)){s.completed.push(age);s.pairAges.delete(key);}
   for(const key of s.links)s.pairAges.set(key,(s.pairAges.get(key)||0)+p.dt);
   if(s.completed.length>400)s.completed.splice(0,s.completed.length-400);
@@ -329,15 +334,30 @@ export function step3d(s,n=1){
    s.prepElapsed+=p.dt;
    s.prepMaxOverlap=Math.max(s.prepMaxOverlap,s.maxOverlap);
    if(s.prepStep>=s.prepSteps){
-    s.p.box=s.prepTargetBox;s.preparing=false;
-    // Preserve actual contact forces/history, but start lifetime statistics
-    // and the stirring-time axis at the prepared state.
-    s.pairAges=new Map([...s.links].map(key=>[key,0]));
-    s.completed=[];
+    s.p.box=s.prepTargetBox;
+    s.preparing=false;
+    s.packedCluster=cluster3d(s).fraction;
+    s.packedLinks=s.links.size;
+    if(s.relaxSteps>0){s.stage='relaxing';s.relaxing=true;}
+    else finishPreparation(s);
+   }
+  }else if(relaxing){
+   s.relaxStep++;s.relaxElapsed+=p.dt;
+   s.relaxMaxOverlap=Math.max(s.relaxMaxOverlap,s.maxOverlap);
+   if(s.relaxStep>=s.relaxSteps){
+    s.relaxedCluster=cluster3d(s).fraction;
+    s.relaxedLinks=s.links.size;
+    s.relaxing=false;
+    finishPreparation(s);
    }
   }else s.t+=p.dt;
  }
  return s;
+}
+function finishPreparation(s){
+ s.stage='stirring';s.preparing=false;s.relaxing=false;
+ s.pairAges=new Map([...s.links].map(key=>[key,0]));
+ s.completed=[];s.t=0;
 }
 export function cluster3d(s){
  const N=s.strips.length;
@@ -385,8 +405,24 @@ export function coherence3d(s,component=cluster3d(s).component){
  let residual=0;for(let i=0;i<relative.length;i++){const r=sub(relative[i],meanP),v=sub(velocities[i],meanV),d=sub(v,cross(omega,r));residual+=dot(d,d);}
  return clamp(1-residual/variance,0,1);
 }
+export function effectiveDensity3d(s){
+ const p=s.p;
+ return s.strips.length*p.length*p.width*p.thickness/Math.pow(p.box,3);
+}
 export function diagnostics3d(s){
  const c=cluster3d(s),avgFinished=s.completed.length?s.completed.reduce((a,b)=>a+b,0)/s.completed.length:0;
- return{t:s.t,preparing:s.preparing,prepProgress:s.preparing?s.prepStep/s.prepSteps:1,box:s.p.box,targetBox:s.prepTargetBox,prepMaxOverlap:s.prepMaxOverlap,fraction:c.fraction,edges:c.edges,degree:c.degree,meanAge:c.meanAge,
- completedAge:avgFinished,coherence:coherence3d(s,c.component),maxOverlap:s.maxOverlap,contacts:s.contacts,strips:s.strips.length};
+ return{
+ t:s.t,stage:s.stage,preparing:s.preparing,relaxing:s.relaxing,
+ prepProgress:s.prepSteps?s.prepStep/s.prepSteps:1,
+ relaxProgress:s.relaxSteps?s.relaxStep/s.relaxSteps:1,
+ box:s.p.box,targetBox:s.prepTargetBox,packingDensity:effectiveDensity3d(s),
+ prepMaxOverlap:s.prepMaxOverlap,relaxMaxOverlap:s.relaxMaxOverlap,
+ overlapFraction:s.p.thickness>0?s.maxOverlap/s.p.thickness:0,
+ highestOverlapFraction:s.p.thickness>0?Math.max(s.prepMaxOverlap,s.relaxMaxOverlap,s.maxOverlap)/s.p.thickness:0,
+ packedCluster:s.packedCluster,relaxedCluster:s.relaxedCluster,
+ packedLinks:s.packedLinks,relaxedLinks:s.relaxedLinks,
+ fraction:c.fraction,edges:c.edges,degree:c.degree,meanAge:c.meanAge,
+ completedAge:avgFinished,coherence:coherence3d(s,c.component),
+ maxOverlap:s.maxOverlap,contacts:s.contacts,strips:s.strips.length
+};
 }
