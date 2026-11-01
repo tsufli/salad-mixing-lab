@@ -116,6 +116,9 @@ L(s)=L_0\left(\frac{L_f}{L_0}\right)^{3s^2-2s^3},\qquad s\in[0,1].
 </section>
 <section id="observables">
 <h2>Observables</h2>
+<h3>Compression trajectory: connectivity versus effective density</h3>
+<canvas id="packingChart" width="960" height="240"></canvas>
+<p class="hint figure-note">Green: largest instantaneous contact-cluster fraction during compression. Orange: cluster fraction after unforced relaxation, at the final density. This is a history-dependent preparation trajectory, <strong>not an equilibrium phase diagram</strong>.</p>
 <h3>Connectivity and motion coherence</h3>
 <canvas id="clusterChart" width="960" height="220"></canvas>
 <p class="hint figure-note"><span style="color:#75c9a4">Green</span>: fraction of strips in the largest connected component. <span style="color:#83b5e9">Blue</span>: rigid-like motion score \(Q\), shown only when a cluster contains at least three strips.</p>
@@ -149,7 +152,7 @@ L(s)=L_0\left(\frac{L_f}{L_0}\right)^{3s^2-2s^3},\qquad s\in[0,1].
 <script type="module">
 const $=id=>document.getElementById(id),c=$('scene'),ctx=c.getContext('2d');
 const worker=new Worker('./strips3d-worker.mjs',{type:'module'});
-let topology=null,positions=null,latest=null,history=[],seedCounter=17,currentSeed=17,playing=true;
+let topology=null,positions=null,latest=null,history=[],packingHistory=[],relaxedPoint=null,seedCounter=17,currentSeed=17,playing=true;
 let az=.83,el=.45,zoom=1,dragging=false,lastPointer=null,pinchDist=null;
 const fields=['strips','length','width','bending','friction','K'];
 const meshSize=()=>$('mesh').value.split('x').map(Number);
@@ -186,7 +189,7 @@ $('presetDense').onclick=()=>preset(64,3.5,1.2,.18);
 $('presetVeryDense').onclick=()=>preset(88,3.8,1.3,.23);
 function reset(reuse=false){
  if(!reuse)currentSeed=seedCounter++;
- history=[];latest=null;positions=null;topology=null;plotAll();requestDraw();
+ history=[];packingHistory=[];relaxedPoint=null;latest=null;positions=null;topology=null;plotAll();drawPackingChart();requestDraw();
  $('networkHistory').textContent='Cluster survival: pending preparation.';
  worker.postMessage({cmd:'reset',params:{...options(),seed:currentSeed},autoPlay:playing});
  $('message').textContent='Placing every requested strip in a dilute periodic box…';$('phase').textContent='Initializing';$('time').textContent='0.00';
@@ -205,7 +208,21 @@ $('export').onclick=()=>{
 worker.onmessage=e=>{
  const m=e.data;
  if(m.type==='topology'){topology=m;latest=m.status;$('message').textContent='3D mesh: '+m.actual+' / '+m.requested+' strips · '+m.vertices+' vertices · '+m.faces+' triangles.';requestDraw();}
- if(m.type==='frame'){positions=new Float32Array(m.positions);latest=m.status;updateStats();requestDraw();}
+ if(m.type==='frame'){
+  positions=new Float32Array(m.positions);latest=m.status;updateStats();requestDraw();
+  if(latest.stage==='packing'){
+   const last=packingHistory.at(-1);
+   if(!last||latest.prepProgress-last.progress>=.025||latest.prepProgress>=1){
+    packingHistory.push({phi:latest.packingDensity,fraction:latest.fraction,progress:latest.prepProgress});
+    drawPackingChart();
+   }
+  }else if(latest.stage==='relaxing'||latest.stage==='stirring'){
+   if(latest.relaxedCluster!==null&&!relaxedPoint){
+    relaxedPoint={phi:latest.packingDensity,fraction:latest.relaxedCluster};
+    drawPackingChart();
+   }
+  }
+ }
  if(m.type==='sample'){history.push(m.data);if(history.length>1500)history.shift();plotAll();}
  if(m.type==='error'){$('message').textContent='Simulation error: '+m.message;playing=false;$('play').textContent='Resume';}
 };
@@ -240,6 +257,30 @@ function updateStats(){
   $('message').textContent='Driving in three alternating shear directions; peak overlap / thickness '+
      (100*worst).toFixed(0)+'%.'+issue;
  }
+}
+function drawPackingChart(){
+ const canvas=$('packingChart'),g=canvas.getContext('2d'),
+ W=canvas.width,H=canvas.height,L=53,R=W-22,T=29,B=H-34;
+ g.clearRect(0,0,W,H);g.beginPath();g.strokeStyle='#6d8297';g.lineWidth=1;
+ g.moveTo(L,T);g.lineTo(L,B);g.lineTo(R,B);g.stroke();
+ g.fillStyle='#bfd2df';g.font='14px system-ui';g.fillText('Largest component / all strips',L+8,18);
+ if(!packingHistory.length)return;
+ const minPhi=Math.min(...packingHistory.map(x=>x.phi)),
+ maxPhi=Math.max(minPhi+.01,...packingHistory.map(x=>x.phi),relaxedPoint?.phi??0);
+ const X=x=>L+(x-minPhi)/(maxPhi-minPhi)*(R-L),Y=y=>B-y*(B-T);
+ g.strokeStyle='#75c9a4';g.lineWidth=2.4;g.beginPath();
+ for(let i=0;i<packingHistory.length;i++){
+  const p=packingHistory[i],x=X(p.phi),y=Y(p.fraction);
+  if(i)g.lineTo(x,y);else g.moveTo(x,y);
+ }g.stroke();
+ if(relaxedPoint){
+  const x=X(relaxedPoint.phi),y=Y(relaxedPoint.fraction);
+  g.fillStyle='#f1b878';g.beginPath();g.arc(x,y,7,0,2*Math.PI);g.fill();
+ }
+ g.fillStyle='#b7c5d4';g.fillText('1.00',8,T+5);g.fillText('0',25,B+4);
+ g.fillText((100*minPhi).toFixed(1)+'%',L,B+19);
+ g.fillText((100*maxPhi).toFixed(1)+'%',R-48,B+19);
+ g.fillText('effective φ',R-105,H-8);
 }
 function plot(canvas,series,title,lines,reference=null){
  const g=canvas.getContext('2d'),W=canvas.width,H=canvas.height,L=52,R=W-18,T=28,B=H-29;
