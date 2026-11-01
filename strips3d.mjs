@@ -97,6 +97,17 @@ function closestSegments(a,b,c,d){
  return{s,t};
 }
 // Closest surface features: 6 vertex/face and 9 edge/edge tests.
+function segmentTriangle(P,Q,T){
+ const dir=sub(Q,P),e1=sub(T[1],T[0]),e2=sub(T[2],T[0]),h=cross(dir,e2),det=dot(e1,h);
+ if(Math.abs(det)<1e-12)return null;
+ const inv=1/det,sp=sub(P,T[0]),u=inv*dot(sp,h);
+ if(u<0||u>1)return null;
+ const q=cross(sp,e1),v=inv*dot(dir,q);
+ if(v<0||u+v>1)return null;
+ const t=inv*dot(e2,q);
+ if(t<0||t>1)return null;
+ return{t,bary:[1-u-v,u,v],point:add(P,scale(dir,t))};
+}
 export function triangleProximity(A,B){
  let best=Infinity,wa=null,wb=null,pa=null,pb=null;
  function offer(x,y,a,b){const d2=dot(sub(x,y),sub(x,y));if(d2<best){best=d2;wa=a;wb=b;pa=x;pb=y;}}
@@ -107,6 +118,14 @@ export function triangleProximity(A,B){
   const {s,t}=closestSegments(A[i],A[j],B[k],B[l]);
   const x=add(A[i],scale(sub(A[j],A[i]),s)),y=add(B[k],scale(sub(B[l],B[k]),t));
   const a=[0,0,0],b=[0,0,0];a[i]=1-s;a[j]=s;b[k]=1-t;b[l]=t;offer(x,y,a,b);
+ }
+ // Edge through face interior is an intersection, even when neither edge
+ // endpoint is close to the opposite triangle (a gap in naive proximity tests).
+ for(const [i,j] of E){
+  const q=segmentTriangle(A[i],A[j],B);
+  if(q){const a=[0,0,0];a[i]=1-q.t;a[j]=q.t;offer(q.point,q.point,a,q.bary);}
+  const r=segmentTriangle(B[i],B[j],A);
+  if(r){const b=[0,0,0];b[i]=1-r.t;b[j]=r.t;offer(r.point,r.point,r.bary,b);}
  }
  return{distance:Math.sqrt(best),wa,wb,pa,pb};
 }
@@ -142,12 +161,21 @@ export function init3d(options={}){
  return s;
 }
 function collisionCandidates(s){
- const {triangles,p}=s,L=p.box,n=Math.max(3,Math.floor(L/1.28)),cell=L/n,
- hash=new Map(),info=new Array(triangles.length);
+ const {triangles,p}=s,L=p.box,info=new Array(triangles.length);
+ let maxRadius=0;
+ for(let i=0;i<triangles.length;i++){
+  const P=triPoints(s,triangles[i]),c=center3(P),r=radius3(P,c);
+  maxRadius=Math.max(maxRadius,r);
+  info[i]={c,r,lo:[0,1,2].map(k=>Math.min(...P.map(v=>v[k]))),
+    hi:[0,1,2].map(k=>Math.max(...P.map(v=>v[k])))};
+ }
+ // Cell width >= sum of any two triangle radii plus contact thickness.
+ // Thus every true contact is found in this cell or its 26 neighbors,
+ // even if the deformable triangles stretch beyond their nominal size.
+ const n=Math.max(2,Math.floor(L/(2*maxRadius+p.thickness+1e-8))),cell=L/n,hash=new Map();
  const key=(a,b,c)=>(a*n+b)*n+c;
  for(let i=0;i<triangles.length;i++){
-  const t=triangles[i],P=triPoints(s,t),c=center3(P),r=radius3(P,c),
-  q=c.map(x=>Math.floor(mod(x,L)/cell)%n),lo=[0,1,2].map(k=>Math.min(...P.map(v=>v[k]))),hi=[0,1,2].map(k=>Math.max(...P.map(v=>v[k])));info[i]={c,r,q,lo,hi};
+  const q=info[i].c.map(x=>Math.floor(mod(x,L)/cell)%n);info[i].q=q;
   const id=key(...q);if(!hash.has(id))hash.set(id,[]);hash.get(id).push(i);
  }
  const out=[];
