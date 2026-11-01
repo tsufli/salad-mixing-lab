@@ -16,16 +16,13 @@ function geometricPair(a,b){
  const dx=pb.x-pa.x,dy=pb.y-pa.y,dist=Math.hypot(dx,dy);
  return{pa,pb,nx:dist>1e-9?dx/dist:1,ny:dist>1e-9?dy/dist:0,overlap:a.r+b.r-dist};
 }
-// Each object is represented in 9 neighboring periodic images.
-// Contact lever arms are relative to the corresponding unwrapped centers.
+// Minimum-image periodic contact geometry. All modeled rods are shorter than
+// half the shortest box dimension, so any overlapping pair uses this image.
 export function contactGeometry(a,b,W=12,H=8){
- let best=null;
- for(let ix=-1;ix<=1;ix++)for(let iy=-1;iy<=1;iy++){
-  const bx=b.x+ix*W,by=b.y+iy*H,shifted={...b,x:bx,y:by};
-  const c=geometricPair(a,shifted);
-  if(!best||c.overlap>best.overlap)best={...c,bx,by};
- }
- return best;
+ const bx=b.x+Math.round((a.x-b.x)/W)*W;
+ const by=b.y+Math.round((a.y-b.y)/H)*H;
+ const shifted={...b,x:bx,y:by};
+ return {...geometricPair(a,shifted),bx,by};
 }
 export function pairForce(a,b,p,W=12,H=8){
  const c=contactGeometry(a,b,W,H);
