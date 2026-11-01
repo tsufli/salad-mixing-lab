@@ -59,7 +59,7 @@ This is a **2D flexible bead-chain** model rather than a 3D triangulated flexibl
 
 Open `strips3d.html` in the published site. The code is in `strips3d.mjs` (3D physics) and `strips3d-worker.mjs` (background simulation worker). The original 2D model is retained independently.
 
-**Scope:** A periodic cube with deformable finite-width triangulated strip surfaces, no lentils, gravity, adhesive links or fluid back-reaction. Each strip has a fixed 7 × 3 vertex grid. Springs on longitudinal, transverse and diagonal mesh edges penalize in-plane stretch/shear. Longitudinal/transverse second differences and mixed differences approximate bending and twist. These are *discrete mesh energies*, not an exact thin-shell constitutive law.
+**Scope:** A periodic cube with deformable finite-width triangulated strip surfaces, no lentils, gravity, adhesive links or fluid back-reaction. Each strip uses a fast 5 × 3 vertex grid by default, with an optional detailed 7 × 3 mesh. Total strip mass is held constant across these mesh resolutions, but a mesh-convergence study of the elastic discretization is still required. Springs on longitudinal, transverse and diagonal mesh edges penalize in-plane stretch/shear. Longitudinal/transverse second differences and mixed differences approximate bending and twist. These are *discrete mesh energies*, not an exact thin-shell constitutive law.
 
 **Drive:** Three successive incompressible sine shears, x depending on y, y depending on z, z depending on x. One phase lasts τ=2.5. Control parameters are strip number and size, periodic box length (density), bending penalty, friction and shear displacement K.
 
@@ -67,7 +67,11 @@ Open `strips3d.html` in the published site. The code is in `strips3d.mjs` (3D ph
 
 **Measurements:** Largest connected component fraction; number and mean age of inter-strip contact links; mean duration of ended contact links; and a velocity coherence diagnostic after subtracting translation and best-fit angular velocity. Coherence is undefined for clusters of fewer than three strips. Neither connectivity nor coherence by itself proves true topological entanglement or material rigidity.
 
-**Performance:** The physics runs in a Web Worker; the main thread remains responsive to camera orbit/zoom. The solver is intentionally a coarse 3D prototype and can be computationally expensive. Parameter and mesh convergence must be established before interpreting any apparent transition.
+**Count-preserving packing:** Requested strips are initialized in a larger dilute periodic cube and then compressed to the selected target box. At each preparation step the center of every strip is translated according to a smooth cube-contraction schedule, without scaling the strip's internal vertices or its reference spring lengths. During packing, background stirring is off and the strips relax under elastic and contact forces. This is a prescribed geometrical compaction, not a pressure-controlled barostat. The simulation explicitly displays packing progress and starts stirring time at t=0 when compaction completes. A dropdown allows quick, balanced and gentle packing; fast compression may induce more penetration.
+
+**Performance:** The physics runs in a Web Worker; the main thread renders only when the simulation delivers a frame or the camera changes. The triangle broad phase now indexes periodic, thickness-inflated triangle axis-aligned bounding boxes in a spatial hash, and uses cheap separating-plane rejection before full proximity evaluation. The default mesh is 5 × 3; 7 × 3 remains selectable. The time step was increased from 0.002 to 0.003 after basic numerical checks. In a same-timestep sparse benchmark the new contact algorithm was approximately 2.6× faster for 22–40 strips. Accuracy and performance at dense packing can differ markedly.
+
+The numerical simulation is still exploratory and computationally intensive at high density. It uses soft contacts, no continuous collision detection, and **does not guarantee no tunneling or topologically faithful entanglement**. Monitor the maximum overlap during compression and stirring. Parameter/time-step/mesh convergence and independent validation are required before interpreting a possible transition.
 
 Run all repository tests:
 
