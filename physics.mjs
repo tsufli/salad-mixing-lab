@@ -1,6 +1,6 @@
 // Dimensionless periodic-box discrete-element model. All three contact species are active.
 // The imposed flow is alternating sine shear, not a physical fluid solver.
-export const defaults={rods:18,disks:85,aspect:6,friction:.55,K:.7,halfPeriod:2.5,dt:.003,stiffness:900,damping:13,drag:7,seed:17};
+export const defaults={rods:36,disks:220,aspect:6,initial:'uniform',friction:.55,K:.7,halfPeriod:2.5,dt:.003,stiffness:900,damping:13,drag:7,seed:17};
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const mod=(x,L)=>((x%L)+L)%L;
 export function rng(seed){let x=seed>>>0;return ()=>{x=(1664525*x+1013904223)>>>0;return x/4294967296;};}
@@ -48,11 +48,11 @@ export function tracerMap(x,y,K,W=12,H=8){
  return{x:W*X,y:H*Y};
 }
 export function init(options={}){
- const p={...defaults,...options},random=rng(p.seed),items=[],W=12,H=8;let id=0;
+ const p={...defaults,...options},random=rng(p.seed),items=[],W=18,H=12;let id=0;
  function place(type,r,len){
   for(let tries=0;tries<2500;tries++){
    const theta=random()*Math.PI*2,x=random()*W,y=random()*H;
-   if(type==='disk'&&x>W*.5)continue;
+   if(type==='disk'&&p.initial==='left'&&x>W*.5)continue;
    const m=type==='rod'?2:.24;
    const obj={id:id++,type,x,y,theta,r,len,m,I:type==='rod'?m*(len*len/12+r*r/2):m*r*r/2,vx:0,vy:0,omega:0,fx:0,fy:0,tau:0};
    if(items.every(o=>contactGeometry(o,obj,W,H).overlap<-.015)){items.push(obj);return;}
@@ -62,6 +62,60 @@ export function init(options={}){
  for(let i=0;i<p.rods;i++)place('rod',.115,.23*p.aspect);
  for(let i=0;i<p.disks;i++)place('disk',.095,0);
  return{p,items,W,H,t:0,contacts:0};
+}
+// Center-based broad phase. The cell dimensions exceed the largest possible
+// sum of two bounding radii at the supported aspect ratios (<= 9).
+export function candidatePairs(s){
+ const {items,W,H}=s,nx=Math.floor(W/2.5),ny=Math.floor(H/2.5),cells=Array.from({length:nx*ny},()=>[]);
+ for(let i=0;i<items.length;i++){
+  const o=items[i],cx=Math.floor(o.x/W*nx)%nx,cy=Math.floor(o.y/H*ny)%ny;
+  cells[cy*nx+cx].push(i);
+ }
+ const pairs=[];
+ for(let i=0;i<items.length;i++){
+  const o=items[i],cx=Math.floor(o.x/W*nx)%nx,cy=Math.floor(o.y/H*ny)%ny;
+  for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+   const ix=mod(cx+dx,nx),iy=mod(cy+dy,ny);
+   for(const j of cells[iy*nx+ix])if(j>i)pairs.push([i,j]);
+  }
+ }
+ return pairs;
+}
+// A contact graph based on instantaneous geometric overlap, distinct from
+// accumulated contact history or persistent entanglement.
+export function clusterStats(s){
+ const rods=s.items.map((o,i)=>o.type==='rod'?i:-1).filter(i=>i>=0),N=rods.length;
+ if(!N)return {largest:0,largestFraction:0,meanDegree:0,edges:0};
+ const parent=Array.from({length:s.items.length},(_,i)=>i),degree=new Array(s.items.length).fill(0);
+ function root(i){while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i];}return i;}
+ let edges=0;
+ for(const [i,j] of candidatePairs(s)){
+  if(s.items[i].type!=='rod'||s.items[j].type!=='rod')continue;
+  if(contactGeometry(s.items[i],s.items[j],s.W,s.H).overlap>0){
+   parent[root(i)]=root(j);degree[i]++;degree[j]++;edges++;
+  }
+ }
+ const counts=new Map();
+ for(const i of rods){const r=root(i);counts.set(r,(counts.get(r)||0)+1);}
+ const largest=Math.max(...counts.values());
+ return {largest,largestFraction:largest/N,meanDegree:2*edges/N,edges};
+}
+// Radially averaged disk structure factor S_dd(k), excluding the q=0 mode.
+// Snapshot values include the finite-N random baseline S~1.
+export function structureFactor(s,maxMode=5){
+ const disks=s.items.filter(o=>o.type==='disk'),N=disks.length;
+ if(!N)return [];
+ const buckets=new Map(),dk=.25;
+ for(let nx=-maxMode;nx<=maxMode;nx++)for(let ny=-maxMode;ny<=maxMode;ny++){
+  if(nx===0&&ny===0)continue;
+  const kx=2*Math.PI*nx/s.W,ky=2*Math.PI*ny/s.H,k=Math.hypot(kx,ky);
+  const shell=Math.round(k/dk);
+  let re=0,im=0;
+  for(const o of disks){const phi=kx*o.x+ky*o.y;re+=Math.cos(phi);im+=Math.sin(phi);}
+  const b=buckets.get(shell)||{k:0,S:0,n:0};
+  b.k+=k;b.S+=(re*re+im*im)/N;b.n++;buckets.set(shell,b);
+ }
+ return [...buckets.values()].map(b=>({k:b.k/b.n,S:b.S/b.n})).sort((a,b)=>a.k-b.k);
 }
 export function step(s,n=1){
  const{items,p,W,H}=s;
@@ -78,7 +132,7 @@ export function step(s,n=1){
    }
    o.tau=p.drag*o.I*(desiredOmega-o.omega);
   }
-  for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++)if(pairForce(items[i],items[j],p,W,H))s.contacts++;
+  for(const [i,j] of candidatePairs(s))if(pairForce(items[i],items[j],p,W,H))s.contacts++;
   for(const o of items){
    o.vx=clamp(o.vx+p.dt*o.fx/o.m,-20,20);o.vy=clamp(o.vy+p.dt*o.fy/o.m,-20,20);
    o.omega=clamp(o.omega+p.dt*o.tau/o.I,-25,25);
