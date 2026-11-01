@@ -140,3 +140,10 @@ test('packing disabled retains original fixed-box initialization for control',()
  step3d(s,3);
  assert.ok(s.t>0);
 });
+
+test('coarse and detailed meshes preserve total strip mass at fixed strip dimensions',()=>{
+ const a=init3d({strips:2,cols:5,packing:false}),b=init3d({strips:2,cols:7,packing:false});
+ const mass=sim=>sim.strips[0].ids.reduce((sum,i)=>sum+sim.vertices[i].m,0);
+ assert.ok(approximately(mass(a),mass(b),1e-10));
+ assert.ok(approximately(mass(a),1.6*a.p.length*a.p.width,1e-10));
+});
