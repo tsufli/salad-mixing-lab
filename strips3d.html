@@ -54,7 +54,7 @@ button:hover{filter:brightness(1.07)}
 <p class="hint" id="message" role="status">Initializing 3D physics…</p>
 <section class="theory" id="model">
 <h2>Model and equations of motion</h2>
-<p>This is an <strong>exploratory 3D discrete elastic-strip model</strong> with no lentils. Each strip is a triangulated rectangular material surface (7 × 3 vertices by default). Different strips have no permanent bonds. The elastic surface can bend and twist; interpenetration is resisted by finite-thickness, two-sided, soft surface contacts. These are <em>penalty contacts</em>, not an exact guarantee against numerical crossing.</p>
+<p>This is an <strong>exploratory 3D discrete elastic-strip model</strong> with no lentils. Each strip is a triangulated rectangular material surface (5 × 3 vertices by default, with a detailed 7 × 3 option). Different strips have no permanent bonds. The elastic surface can bend and twist; interpenetration is resisted by finite-thickness, two-sided, soft surface contacts. These are <em>penalty contacts</em>, not an exact guarantee against numerical crossing.</p>
 <h3>Elastic strip</h3>
 <div class="math-display">\[
 E_{\mathrm{el}} = E_s+E_b,\qquad
@@ -124,6 +124,7 @@ L(s)=L_0\left(\frac{L_f}{L_0}\right)^{3s^2-2s^3},\qquad s\in[0,1].
 <aside>
 <div class="toolbar"><button id="play">Pause</button><button id="newRun">New run</button><button id="sameSeed" class="secondary">Restart same seed</button></div>
 <label>Number of strips <output id="stripsOut"></output><input id="strips" type="range" min="6" max="40" step="2" value="22"></label>
+<label>Mesh detail<select id="cols"><option value="5" selected>Fast · 5 × 3 vertices</option><option value="7">Detailed · 7 × 3 vertices</option></select></label>
 <label>Strip length <output id="lengthOut"></output><input id="length" type="range" min="1.8" max="3.8" step=".2" value="3.2"></label>
 <label>Periodic box side L <output id="boxOut"></output><input id="box" type="range" min="5.5" max="10" step=".5" value="7"></label>
 <label>Strip width <output id="widthOut"></output><input id="width" type="range" min=".4" max="1.3" step=".1" value=".9"></label>
@@ -132,7 +133,7 @@ L(s)=L_0\left(\frac{L_f}{L_0}\right)^{3s^2-2s^3},\qquad s\in[0,1].
 <label>3D stirring strength K <output id="KOut"></output><input id="K" type="range" min="0" max="1.3" step=".05" value=".5"></label>
 <label>Packing quality<select id="packingSteps"><option value="180">Quick (more overlap)</option><option value="420" selected>Balanced</option><option value="800">Gentle (slower)</option></select></label>
 <label>Steps per worker batch<select id="batch"><option value="2">2 · smooth updates</option><option value="6" selected>6 · balanced</option><option value="12">12 · maximum throughput</option></select></label>
-<p class="hint">Each run first packs the requested strips by smoothly compressing a dilute box. Packing progress is shown above; measurements begin after preparation. The optimized solver runs in a browser worker. More strips and higher packing quality still cost computation time.</p>
+<p class="hint">Each run packs all requested strips by smoothly compressing a dilute box. Choose fast or detailed mesh resolution; packing progress is shown above, and measurements begin after preparation. The optimized solver runs in a browser worker. More strips and higher packing quality still cost computation time.</p>
 <button id="export" class="secondary">Export statistics CSV</button>
 <p class="hint">Volume-filling network formation is a hypothesis to test. A large cluster fraction need not mean a mechanically coherent or permanently entangled object.</p>
 </aside>
@@ -143,11 +144,11 @@ const worker=new Worker('./strips3d-worker.mjs',{type:'module'});
 let topology=null,positions=null,latest=null,history=[],seedCounter=17,currentSeed=17,playing=true;
 let az=.83,el=.45,zoom=1,dragging=false,lastPointer=null,pinchDist=null;
 const fields=['strips','length','width','box','bending','friction','K'];
-const options=()=>({...Object.fromEntries(fields.map(k=>[k,+$(k).value])),packingSteps:+$('packingSteps').value});
+const options=()=>({...Object.fromEntries(fields.map(k=>[k,+$(k).value])),cols:+$('cols').value,packingSteps:+$('packingSteps').value});
 for(const key of fields){const fn=()=>$(key+'Out').textContent=$(key).value;$(key).addEventListener('input',fn);fn();}
 function reset(reuse=false){
  if(!reuse)currentSeed=seedCounter++;
- history=[];latest=null;positions=null;topology=null;
+ history=[];latest=null;positions=null;topology=null;plotAll();requestDraw();
  worker.postMessage({cmd:'reset',params:{...options(),seed:currentSeed},autoPlay:playing});
  $('message').textContent='Placing every requested strip in a dilute periodic box…';$('phase').textContent='Initializing';$('time').textContent='0.00';
 }
