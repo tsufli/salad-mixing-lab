@@ -4,6 +4,7 @@
 export const defaults3d={
  strips:64,length:3.5,width:1.2,cols:5,rows:2,box:6.3,bending:14,
  friction:.75,K:.5,tau:2.5,dt:.003,seed:17,packing:true,packingSteps:420,relaxSteps:240,
+ lentils:false,lentilCount:110,lentilRadius:.115,lentilMass:.22,
  spring:280,normalStiffness:3200,normalDamp:35,tangentialStiffness:110,
  tangentialDamp:1.5,drag:9,thickness:.16
 };
@@ -145,7 +146,7 @@ export function init3d(options={}){
  for(let retry=0;retry<5;retry++){
   p.box=initial;
   const rng=seededRandom(p.seed+1013*retry),L=p.box;
-  const s={p,t:0,vertices:[],triangles:[],springs:[],bends:[],strips:[],
+  const s={p,t:0,vertices:[],triangles:[],springs:[],bends:[],strips:[],lentils:[],lentilMemory:new Map(),lentilContacts:0,lentilStripContacts:0,
    memory:new Map(),pairAges:new Map(),completed:[],links:new Set(),
    maxOverlap:0,contacts:0,placementFailed:0,
    preparing:packed&&initial>target+1e-10,relaxing:false,
@@ -179,11 +180,41 @@ export function init3d(options={}){
    }
    if(!placed){success=false;break;}
   }
-  if(success)return s;
+  if(success){if(p.lentils)placeLentils(s,rng);return s;}
   if(!packed)throw new Error('Failed to place all requested strips without overlap; enable packing or increase box size.');
   initial*=1.3;
  }
  throw new Error('Unable to initialize requested strips even after expanding the dilute box.');
+}
+
+// Lentils are finite-mass spheres with periodic positions, not decorative tracers.
+// Insert them into the dilute starting box without overlaps. If a requested
+// population cannot be placed, initialization reports an error rather than
+// silently dropping particles.
+function placeLentils(s,rng){
+ const {p,triangles,vertices}=s,L=p.box,r=p.lentilRadius,half=p.thickness/2;
+ const faces=triangles.map(t=>{
+  const P=t.ids.map(i=>vertices[i].p),c=center3(P);
+  return {P,c,rad:radius3(P,c)};
+ });
+ for(let i=0;i<p.lentilCount;i++){
+  let found=null;
+  for(let attempt=0;attempt<2500;attempt++){
+   const x=[rng()*L,rng()*L,rng()*L];
+   if(s.lentils.some(d=>norm(x.map((v,k)=>v-d.p[k]-Math.round((v-d.p[k])/L)*L))<2*r*1.07))continue;
+   let overlaps=false;
+   for(const face of faces){
+    const centerDist=norm(x.map((v,k)=>v-face.c[k]-Math.round((v-face.c[k])/L)*L));
+    if(centerDist>face.rad+r+half+.02)continue;
+    const shift=face.c.map((v,k)=>Math.round((x[k]-v)/L)*L);
+    const points=face.P.map(v=>add(v,shift));
+    if(norm(sub(x,closestTri(x,...points).p))<r+half+.02){overlaps=true;break;}
+   }
+   if(!overlaps){found=x;break;}
+  }
+  if(!found)throw Error('Could not place all lentils: reduce lentil count or increase the preparation-box size.');
+  s.lentils.push({p:found,v:[0,0,0],f:[0,0,0],m:p.lentilMass,r});
+ }
 }
 // One quasi-static packing increment. Compression changes the centers of the
 // strips but does not change edge rest lengths or scale any individual strip.
@@ -195,6 +226,7 @@ function compressCenters(s){
   for(const id of strip.ids)for(let k=0;k<3;k++)c[k]+=s.vertices[id].p[k]/strip.ids.length;
   for(const id of strip.ids)for(let k=0;k<3;k++)s.vertices[id].p[k]+=c[k]*(ratio-1);
  }
+ for(const d of s.lentils)for(let k=0;k<3;k++)d.p[k]*=ratio;
  s.p.box=newBox;s.prepStep++;
 }
 function collisionCandidates(s){
@@ -296,6 +328,93 @@ function contactForce(s,ta,tb,id,dt){
  }
  return true;
 }
+
+// Broad phase: periodic hashed AABBs expanded by the lentil's interaction range.
+// Each sphere queries its own cell, giving ~O(Nfaces+Nl) cell insertion/lookup.
+function lentilFaceCandidates(s){
+ if(!s.lentils.length)return [];
+ const {triangles,vertices,p}=s,L=p.box,rad=p.lentilRadius+p.thickness/2;
+ const n=Math.max(2,Math.min(14,Math.floor(L/.9))),cell=L/n,grid=new Map();
+ const key=(x,y,z)=>(x*n+y)*n+z,indices=(lo,hi)=>{
+  const a=Math.floor(lo/cell),b=Math.floor(hi/cell);
+  if(b-a+1>=n)return Array.from({length:n},(_,i)=>i);
+  const out=[];for(let i=a;i<=b;i++)out.push(mod(i,n));return out;
+ };
+ for(let i=0;i<triangles.length;i++){
+  const P=triangles[i].ids.map(j=>vertices[j].p);
+  const axes=[0,1,2].map(k=>indices(Math.min(...P.map(x=>x[k]))-rad,Math.max(...P.map(x=>x[k]))+rad));
+  for(const x of axes[0])for(const y of axes[1])for(const z of axes[2]){
+   const id=key(x,y,z);let slot=grid.get(id);
+   if(!slot){slot=[];grid.set(id,slot);}slot.push(i);
+  }
+ }
+ const out=[];
+ for(let l=0;l<s.lentils.length;l++){
+  const x=s.lentils[l].p.map(v=>mod(Math.floor(mod(v,L)/cell),n));
+  for(const i of grid.get(key(...x))||[])out.push([l,i]);
+ }
+ return out;
+}
+export function lentilCandidates(s){return lentilFaceCandidates(s);}
+// Friction with finite tangential memory. Contact normals point from surface
+// toward lentil, so the force on the lentil is the positive contact force.
+function lentilStripContact(s,li,ti,dt,active){
+ const {p,vertices}=s,d=s.lentils[li],tri=s.triangles[ti],L=p.box;
+ const P=tri.ids.map(i=>vertices[i].p),center=center3(P);
+ const shifted=P.map(v=>v.map((x,k)=>x+Math.round((d.p[k]-center[k])/L)*L));
+ const q=closestTri(d.p,...shifted),D=sub(d.p,q.p),dist=norm(D),range=d.r+p.thickness/2;
+ if(dist>=range)return false;
+ let normal;
+ if(dist>1e-9)normal=scale(D,1/dist);
+ else{const face=cross(sub(shifted[1],shifted[0]),sub(shifted[2],shifted[0])),m=norm(face);
+   normal=m>1e-10?scale(face,1/m):[0,0,1];
+ }
+ const faceV=[0,0,0];
+ for(let k=0;k<3;k++)for(let j=0;j<3;j++)faceV[k]+=q.w[j]*vertices[tri.ids[j]].v[k];
+ const dv=sub(d.v,faceV),vn=dot(dv,normal),vt=sub(dv,scale(normal,vn)),
+ fn=Math.max(0,p.normalStiffness*(range-dist)-p.normalDamp*vn),
+ key='st:'+li+':'+ti,prior=s.lentilMemory.get(key),old=prior?prior.xi:[0,0,0];
+ let xi=add(sub(old,scale(normal,dot(old,normal))),scale(vt,dt));
+ let ft=add(scale(xi,-p.tangentialStiffness),scale(vt,-p.tangentialDamp));
+ const m=norm(ft),limit=p.friction*fn;
+ if(m>limit){ft=scale(ft,limit/m);xi=scale(add(ft,scale(vt,p.tangentialDamp)),-1/p.tangentialStiffness);}
+ const F=add(scale(normal,fn),ft);
+ for(let k=0;k<3;k++){
+  d.f[k]+=F[k];
+  for(let j=0;j<3;j++)vertices[tri.ids[j]].f[k]-=q.w[j]*F[k];
+ }
+ s.lentilMemory.set(key,{xi});active.add(key);
+ s.lentilContacts++;s.lentilStripContacts++;
+ return true;
+}
+function lentilLentilContact(s,i,j,dt,active){
+ const {p}=s,a=s.lentils[i],b=s.lentils[j],L=p.box;
+ const d=b.p.map((v,k)=>v-a.p[k]-Math.round((v-a.p[k])/L)*L);
+ const distance=norm(d),range=a.r+b.r;
+ if(distance>=range)return false;
+ const n=distance>1e-10?scale(d,1/distance):[1,0,0],
+ dv=sub(b.v,a.v),vn=dot(dv,n),vt=sub(dv,scale(n,vn)),
+ fn=Math.max(0,p.normalStiffness*(range-distance)-p.normalDamp*vn);
+ const key='ll:'+i+':'+j,prior=s.lentilMemory.get(key),old=prior?prior.xi:[0,0,0];
+ let xi=add(sub(old,scale(n,dot(old,n))),scale(vt,dt));
+ let ft=add(scale(xi,-p.tangentialStiffness),scale(vt,-p.tangentialDamp));
+ const m=norm(ft),limit=p.friction*fn;
+ if(m>limit){ft=scale(ft,limit/m);xi=scale(add(ft,scale(vt,p.tangentialDamp)),-1/p.tangentialStiffness);}
+ const F=add(scale(n,fn),ft);
+ for(let k=0;k<3;k++){a.f[k]-=F[k];b.f[k]+=F[k];}
+ s.lentilMemory.set(key,{xi});active.add(key);
+ s.lentilContacts++;
+ return true;
+}
+function lentilForces(s,dt){
+ if(!s.lentils.length)return;
+ const active=new Set();
+ for(const [l,t] of lentilFaceCandidates(s))lentilStripContact(s,l,t,dt,active);
+ // Sphere-sphere narrow phase is cheap for the default 110 lentils.
+ for(let i=0;i<s.lentils.length;i++)for(let j=i+1;j<s.lentils.length;j++)
+  lentilLentilContact(s,i,j,dt,active);
+ for(const key of s.lentilMemory.keys())if(!active.has(key))s.lentilMemory.delete(key);
+}
 function recenterStrips(s){
  const L=s.p.box;
  for(const strip of s.strips){
@@ -314,20 +433,30 @@ export function step3d(s,n=1){
    const u=(packing||relaxing)?[0,0,0]:drive3d(a.p,s.t,p);
    for(let k=0;k<3;k++)a.f[k]=p.drag*a.m*(u[k]-a.v[k]);
   }
+  for(const d of s.lentils){
+   const u=(packing||relaxing)?[0,0,0]:drive3d(d.p,s.t,p);
+   for(let k=0;k<3;k++)d.f[k]=p.drag*d.m*(u[k]-d.v[k]);
+  }
   applyElastic(s);
   s.contacts=0;s.maxOverlap=0;s.links=new Set();
+  s.lentilContacts=0;s.lentilStripContacts=0;
   const active=new Set();
   for(const [i,k] of collisionCandidates(s)){
    const key=i+':'+k;
    if(contactForce(s,s.triangles[i],s.triangles[k],key,p.dt))active.add(key);
   }
   for(const [key] of s.memory)if(!active.has(key))s.memory.delete(key);
+  lentilForces(s,p.dt);
   for(const [key,age] of s.pairAges)if(!s.links.has(key)){s.completed.push(age);s.pairAges.delete(key);}
   for(const key of s.links)s.pairAges.set(key,(s.pairAges.get(key)||0)+p.dt);
   if(s.completed.length>400)s.completed.splice(0,s.completed.length-400);
   for(const a of vertices)for(let k=0;k<3;k++){
    a.v[k]=clamp(a.v[k]+p.dt*a.f[k]/a.m,-8,8);
    a.p[k]+=p.dt*a.v[k];
+  }
+  for(const d of s.lentils)for(let k=0;k<3;k++){
+   d.v[k]=clamp(d.v[k]+p.dt*d.f[k]/d.m,-8,8);
+   d.p[k]=mod(d.p[k]+p.dt*d.v[k],p.box);
   }
   recenterStrips(s);
   if(packing){
@@ -423,6 +552,7 @@ export function diagnostics3d(s){
  packedLinks:s.packedLinks,relaxedLinks:s.relaxedLinks,
  fraction:c.fraction,edges:c.edges,degree:c.degree,meanAge:c.meanAge,
  completedAge:avgFinished,coherence:coherence3d(s,c.component),
- maxOverlap:s.maxOverlap,contacts:s.contacts,strips:s.strips.length
+ maxOverlap:s.maxOverlap,contacts:s.contacts,strips:s.strips.length,
+ lentils:s.lentils.length,lentilContacts:s.lentilContacts,lentilStripContacts:s.lentilStripContacts
 };
 }
