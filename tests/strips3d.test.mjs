@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
  defaults3d,init3d,step3d,drive3d,tracerMap3d,
- triangleProximity,periodicProximity,surfaceCandidates,cluster3d,diagnostics3d
+ triangleProximity,periodicProximity,surfaceCandidates,cluster3d,diagnostics3d,mixtureComposition3d,effectiveDensity3d
 } from '../strips3d.mjs';
 
 const finite3=v=>v.every(Number.isFinite);
@@ -243,4 +243,27 @@ test('optional lentils are advected and remain finite through all stages',()=>{
  assert.equal(s.lentils.length,25);
  assert.ok(s.lentils.some((x,i)=>x.p.some((v,k)=>Math.abs(v-initial[i][k])>1e-5)));
  assert.ok(s.lentils.every(x=>x.p.every(Number.isFinite)&&x.v.every(Number.isFinite)));
+});
+
+test('controlled volume model approximately preserves ingredient volume across ratios',()=>{
+ const results=[0,.5,1,2,3,4].map(r=>mixtureComposition3d({referenceLeaves:64,ratio:r}));
+ const V=results[0].actualVolume;
+ for(const [i,c] of results.entries()){
+  assert.ok(Math.abs(c.actualVolume-V)/V<.012);
+  assert.ok(Math.abs(c.ratio-[0,.5,1,2,3,4][i])<.035);
+  assert.ok(c.strips>0&&c.lentilCount>=0);
+ }
+ assert.equal(results[0].lentilCount,0);
+});
+test('mixture-aware effective density includes both leaf and lentil material volumes',()=>{
+ const config=mixtureComposition3d({referenceLeaves:20,ratio:2});
+ const targetBox=Math.cbrt(config.targetVolume/.12);
+ const s=init3d({strips:config.strips,lentils:true,lentilCount:config.lentilCount,
+  box:targetBox,packingSteps:5,relaxSteps:0,seed:71});
+ step3d(s,5);
+ assert.equal(s.strips.length,config.strips);
+ assert.equal(s.lentils.length,config.lentilCount);
+ const actual=effectiveDensity3d(s);
+ assert.ok(Math.abs(actual-.12)<.003);
+ assert.ok(Math.abs(diagnostics3d(s).ingredientVolume-config.actualVolume)<1e-8);
 });
