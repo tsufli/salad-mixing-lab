@@ -132,8 +132,11 @@ L(s)=L_0\left(\frac{L_f}{L_0}\right)^{3s^2-2s^3},\qquad s\in[0,1].
 <aside>
 <div class="toolbar"><button id="play">Pause</button><button id="newRun">New run</button><button id="sameSeed" class="secondary">Restart same seed</button></div>
 <div class="toolbar"><button id="presetLoose" class="secondary">Loose</button><button id="presetDense">Dense</button><button id="presetVeryDense" class="secondary">Very dense</button></div>
-<label>Number of strips <output id="stripsOut"></output><input id="strips" type="range" min="12" max="100" step="4" value="64"></label>
+<label><span id="stripsLabel">Reference leaves (zero-lentil case)</span> <output id="stripsOut"></output><input id="strips" type="range" min="12" max="100" step="4" value="64"></label>
 <label class="check-row"><input type="checkbox" id="lentils"> Include lentils (physical particles)</label>
+<label class="check-row"><input type="checkbox" id="fixedVolume" checked> Fixed total ingredient volume (comparison mode)</label>
+<label id="ratioRow" hidden>Lentils per leaf <output id="ratioOut">2.0</output><input id="ratio" type="range" min="0" max="4" step=".25" value="2"></label>
+<p class="hint" id="comparisonPreview">Fixed-volume composition: —</p>
 <label id="lentilCountRow" hidden>Number of lentils <output id="lentilCountOut">110</output><input id="lentilCount" type="range" min="20" max="200" step="10" value="110"></label>
 <label>Mesh detail<select id="mesh"><option value="5x2" selected>Fast · 5 × 2 vertices</option><option value="5x3">Balanced · 5 × 3 vertices</option><option value="7x3">Detailed · 7 × 3 vertices</option></select></label>
 <label>Strip length <output id="lengthOut"></output><input id="length" type="range" min="2" max="4.6" step=".1" value="3.5"></label>
@@ -160,31 +163,66 @@ let topology=null,positions=null,lentilPositions=null,latest=null,history=[],pac
 let az=.83,el=.45,zoom=1,dragging=false,lastPointer=null,pinchDist=null;
 const fields=['strips','length','width','bending','friction','K'];
 const meshSize=()=>$('mesh').value.split('x').map(Number);
+const leafVolume=()=>+$('length').value*+$('width').value*.16;
+const lentilVolume=()=>4*Math.PI*Math.pow(.115,3)/3;
+// Same discrete composition solution as mixtureComposition3d in strips3d.mjs.
+function composition(reference,ratio){
+ const budget=reference*leafVolume(),vl=leafVolume(),vd=lentilVolume();
+ if(ratio<=0)return{leaves:reference,lentils:0,actual:budget,budget,actualRatio:0,error:0};
+ const center=budget/(vl+ratio*vd);let best=null;
+ for(let n=Math.max(1,Math.floor(center)-5);n<=Math.ceil(center)+5;n++){
+  const m=Math.max(0,Math.round(n*ratio)),actual=n*vl+m*vd;
+  const error=(actual-budget)/budget,ratioError=Math.abs(m/n-ratio)/Math.max(.1,ratio);
+  const score=Math.abs(error)+.01*ratioError;
+  if(!best||score<best.score)best={leaves:n,lentils:m,actual,budget,error,actualRatio:m/n,score};
+ }
+ return best;
+}
 function options(){
- const [cols,rows]=meshSize(),N=+$('strips').value,length=+$('length').value,width=+$('width').value;
- const volume=N*length*width*.16;
+ const [cols,rows]=meshSize(),reference=+$('strips').value;
+ const fixed=$('fixedVolume').checked,enabled=$('lentils').checked;
+ const ratio=enabled?(+$('ratio').value):0;
+ const c=fixed?composition(reference,ratio):null;
+ const N=fixed?c.leaves:reference,nd=enabled?(fixed?c.lentils:+$('lentilCount').value):0;
+ const actual=N*leafVolume()+nd*lentilVolume();
+ const budget=fixed?reference*leafVolume():actual;
  const box=$('densityMode').value==='fraction'?
-  Math.cbrt(volume/Math.max(.01,+$('densityTarget').value)):+$('box').value;
- return {...Object.fromEntries(fields.map(k=>[k,+$(k).value])),cols,rows,box,
-    packingSteps:+$('packingSteps').value,relaxSteps:+$('relaxSteps').value,lentils:$('lentils').checked,lentilCount:+$('lentilCount').value};
+  Math.cbrt(budget/Math.max(.01,+$('densityTarget').value)):+$('box').value;
+ return {...Object.fromEntries(fields.map(k=>[k,+$(k).value])),
+  strips:N,lentils:enabled&&nd>0,lentilCount:nd,
+  cols,rows,box,packingSteps:+$('packingSteps').value,
+  relaxSteps:+$('relaxSteps').value,
+  comparisonMode:fixed,referenceLeaves:reference,targetIngredientVolume:budget};
 }
 function updateDensityPreview(){
  for(const key of fields)$(key+'Out').textContent=$(key).value;
  $('densityTargetOut').textContent=(100*(+$('densityTarget').value)).toFixed(0)+'%';
  $('boxOut').textContent=(+$('box').value).toFixed(1);
  $('lentilCountOut').textContent=$('lentilCount').value;
- $('lentilCountRow').hidden=!$('lentils').checked;
+ $('ratioOut').textContent=(+$('ratio').value).toFixed(2);
+ const fixed=$('fixedVolume').checked,enabled=$('lentils').checked;
+ $('stripsLabel').textContent=fixed?'Reference leaves (zero-lentil case)':'Number of leaves';
+ $('ratioRow').hidden=!fixed||!enabled;
+ $('lentilCountRow').hidden=fixed||!enabled;
+ $('comparisonPreview').hidden=!fixed;
  $('densityControl').hidden=$('densityMode').value!=='fraction';
  $('boxControl').hidden=$('densityMode').value!=='manual';
- const p=options(),phi=p.strips*p.length*p.width*.16/Math.pow(p.box,3);
- $('densityPreview').textContent='Target box side L = '+p.box.toFixed(2)+
-  ' · effective φ = '+(100*phi).toFixed(1)+'%'+
-  (phi>.22?' · extreme packing: severe overlaps possible':'');
+ const p=options(),volume=p.strips*leafVolume()+p.lentilCount*lentilVolume();
+ const phi=volume/Math.pow(p.box,3);
+ $('densityPreview').textContent='Box side L = '+p.box.toFixed(2)+
+  ' · actual effective φ = '+(100*phi).toFixed(2)+'%'+
+  (phi>.22?' · high packing: significant overlaps possible':'');
+ if(fixed){
+  const err=100*(volume-p.targetIngredientVolume)/p.targetIngredientVolume;
+  $('comparisonPreview').textContent='Composition: '+p.strips+' leaves + '+p.lentilCount+
+   ' lentils · actual r = '+(p.lentilCount/Math.max(1,p.strips)).toFixed(2)+
+   ' · total effective volume '+volume.toFixed(3)+' / '+p.targetIngredientVolume.toFixed(3)+
+   ' ('+(err>=0?'+':'')+err.toFixed(2)+'% rounding error)';
+ }
 }
 for(const k of fields)$(k).addEventListener('input',updateDensityPreview);
-for(const id of ['densityTarget','box','mesh','densityMode'])$(id).addEventListener('input',updateDensityPreview);
-for(const id of ['densityMode','mesh','lentils'])$(id).addEventListener('change',updateDensityPreview);
-$('lentilCount').addEventListener('input',updateDensityPreview);
+for(const id of ['densityTarget','box','mesh','densityMode','ratio','lentilCount'])$(id).addEventListener('input',updateDensityPreview);
+for(const id of ['densityMode','mesh','lentils','fixedVolume'])$(id).addEventListener('change',updateDensityPreview);
 updateDensityPreview();
 function preset(N,len,width,phi){
  $('strips').value=N;$('length').value=len;$('width').value=width;
