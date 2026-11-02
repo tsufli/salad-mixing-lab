@@ -17,6 +17,36 @@ const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
 const scale=(a,s)=>[a[0]*s,a[1]*s,a[2]*s];
 const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 const norm=a=>Math.sqrt(dot(a,a));
+// Controlled-mixture experiment: keep effective ingredient volume fixed as
+// lentils-per-leaf ratio varies. Finite integer counts give a small quantization
+// error. This is a *geometrical* volume budget, not a fluid volume or density.
+export function mixtureComposition3d({
+ referenceLeaves=64,ratio=0,length=3.5,width=1.2,thickness=.16,
+ lentilRadius=.115
+}={}){
+ if(!Number.isFinite(ratio)||ratio<0)throw Error('Lentils-per-leaf ratio must be nonnegative.');
+ const vl=length*width*thickness,vd=4*Math.PI*lentilRadius**3/3;
+ const targetVolume=referenceLeaves*vl;
+ if(!(targetVolume>0&&vd>0))throw Error('Positive leaf and lentil sizes are required.');
+ if(ratio===0)return{strips:Math.round(referenceLeaves),lentilCount:0,
+  ratio:0,targetVolume,actualVolume:Math.round(referenceLeaves)*vl,
+  volumeError:(Math.round(referenceLeaves)*vl-targetVolume)/targetVolume,leafVolume:vl,lentilVolume:vd};
+ const center=targetVolume/(vl+ratio*vd);
+ // Select an integer leaf count near the continuous-volume solution while
+ // minimizing relative volume error and then composition-ratio rounding error.
+ let best=null;
+ for(let nl=Math.max(1,Math.floor(center)-5);nl<=Math.ceil(center)+5;nl++){
+  const nd=Math.max(0,Math.round(ratio*nl));
+  const actual=nl*vl+nd*vd,err=Math.abs(actual-targetVolume)/targetVolume,
+   ratioError=Math.abs(nd/nl-ratio)/Math.max(ratio,.1);
+  const score=err+0.01*ratioError;
+  if(!best||score<best.score)best={nl,nd,actual,score};
+ }
+ return{strips:best.nl,lentilCount:best.nd,ratio:best.nd/best.nl,
+  targetVolume,actualVolume:best.actual,
+  volumeError:(best.actual-targetVolume)/targetVolume,
+  leafVolume:vl,lentilVolume:vd};
+}
 export function seededRandom(seed){let s=seed>>>0;return()=>{s=(1664525*s+1013904223)>>>0;return s/4294967296;};}
 export function drive3d(pos,t,p){
  const {box:L,K,tau}=p,q=L*K/tau,phase=Math.floor((t+1e-10)/tau)%3;
@@ -535,8 +565,9 @@ export function coherence3d(s,component=cluster3d(s).component){
  return clamp(1-residual/variance,0,1);
 }
 export function effectiveDensity3d(s){
- const p=s.p;
- return s.strips.length*p.length*p.width*p.thickness/Math.pow(p.box,3);
+ const p=s.p,leaf=s.strips.length*p.length*p.width*p.thickness;
+ const lentil=s.lentils.length*4*Math.PI*p.lentilRadius**3/3;
+ return (leaf+lentil)/Math.pow(p.box,3);
 }
 export function diagnostics3d(s){
  const c=cluster3d(s),avgFinished=s.completed.length?s.completed.reduce((a,b)=>a+b,0)/s.completed.length:0;
@@ -553,6 +584,10 @@ export function diagnostics3d(s){
  fraction:c.fraction,edges:c.edges,degree:c.degree,meanAge:c.meanAge,
  completedAge:avgFinished,coherence:coherence3d(s,c.component),
  maxOverlap:s.maxOverlap,contacts:s.contacts,strips:s.strips.length,
- lentils:s.lentils.length,lentilContacts:s.lentilContacts,lentilStripContacts:s.lentilStripContacts
+ lentils:s.lentils.length,lentilContacts:s.lentilContacts,lentilStripContacts:s.lentilStripContacts,
+ lentilsPerLeaf:s.strips.length?s.lentils.length/s.strips.length:0,
+ ingredientVolume:s.strips.length*p.length*p.width*p.thickness+
+   s.lentils.length*4*Math.PI*p.lentilRadius**3/3,
+ boxVolume:p.box**3
 };
 }
