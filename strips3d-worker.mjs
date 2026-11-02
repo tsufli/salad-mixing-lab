@@ -5,8 +5,10 @@ function sendFrame(){
  if(!sim)return;
  const positions=new Float32Array(sim.vertices.length*3);
  for(let i=0;i<sim.vertices.length;i++)for(let k=0;k<3;k++)positions[i*3+k]=sim.vertices[i].p[k];
+ const lentils=new Float32Array(sim.lentils.length*3);
+ for(let i=0;i<sim.lentils.length;i++)for(let k=0;k<3;k++)lentils[i*3+k]=sim.lentils[i].p[k];
  const status=diagnostics3d(sim);status.stepsPerSecond=stepRate;
- postMessage({type:'frame',positions:positions.buffer,status},[positions.buffer]);
+ postMessage({type:'frame',positions:positions.buffer,lentilPositions:lentils.buffer,status},[positions.buffer,lentils.buffer]);
 }
 function sendSample(){
  const d=diagnostics3d(sim);
@@ -38,7 +40,7 @@ self.onmessage=e=>{
    sim=init3d(e.data.params);nextSample=0;stepRate=0;
    postMessage({type:'topology',box:sim.p.box,targetBox:sim.prepTargetBox,
     strips:sim.strips.map(x=>({id:x.id,ids:x.ids,grid:x.grid})),
-    triangles:sim.triangles.map(x=>({strip:x.strip,ids:x.ids})),
+    triangles:sim.triangles.map(x=>({strip:x.strip,ids:x.ids})),lentils:sim.lentils.length,lentilRadius:sim.p.lentilRadius,
     actual:sim.strips.length,requested:sim.p.strips,vertices:sim.vertices.length,faces:sim.triangles.length,
     status:diagnostics3d(sim)});
    sendFrame();
