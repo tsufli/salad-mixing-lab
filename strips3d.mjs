@@ -570,7 +570,7 @@ export function effectiveDensity3d(s){
  return (leaf+lentil)/Math.pow(p.box,3);
 }
 export function diagnostics3d(s){
- const c=cluster3d(s),avgFinished=s.completed.length?s.completed.reduce((a,b)=>a+b,0)/s.completed.length:0;
+ const p=s.p,c=cluster3d(s),avgFinished=s.completed.length?s.completed.reduce((a,b)=>a+b,0)/s.completed.length:0;
  return{
  t:s.t,stage:s.stage,preparing:s.preparing,relaxing:s.relaxing,
  prepProgress:s.prepSteps?s.prepStep/s.prepSteps:1,
