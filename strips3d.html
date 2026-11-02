@@ -100,6 +100,13 @@ F_n&=\max(0,k_n\delta-\eta_n v_n),\\
 \]</div>
 <p>The closest points are calculated using vertex–triangle and edge–edge candidates in 3D, with minimum-image periodicity. Tangential displacement history is stored for each contacting triangle pair and reset on separation. The Coulomb cap allows sliding. This does not introduce artificial adhesion or inter-strip bonds.</p>
 <h3>Optional lentils</h3><p>When the Lentils checkbox is enabled, a separately seeded population of spheres (default 110, radius 0.115) is placed without initial overlap in the dilute box and participates in compression, unforced relaxation and the same stirring field. These are <strong>spherical stand-ins</strong>, not lentil-shaped disks. Lentil–lentil and lentil–strip interactions are two-way contact forces; strips alone still define the leaf-network connectivity observable. Changing the checkbox requires a new run.</p>
+<h3>Controlled-composition comparisons</h3>
+<p>In fixed-volume comparison mode the parameter \(r=N_d/N_f\) is the number of lentils per leaf. A reference leaf-only population \(N_0\) sets the constant effective ingredient volume \(V_0=N_0v_f\). Each ingredient has an estimated volume \(v_f=L_wh_w h\) or \(v_d=4\pi R_d^3/3\). For each \(r\) we choose integer counts near the solution of</p>
+<div class="math-display">\[
+N_f=\frac{V_0}{v_f+r v_d},\qquad N_d=rN_f,\qquad
+\phi_{\rm eff}=\frac{N_fv_f+N_dv_d}{L_{\rm box}^3}.
+\]</div>
+<p>Integer particle counts cause small differences from the target; actual counts, realized ratio and fractional volume error are shown above and exported with each run. At a fixed requested effective fraction, the <strong>box side and nominal total ingredient volume stay fixed across the mixture scan</strong>. This volume is a geometrical proxy for the model surfaces and spheres; it is not experimentally calibrated salad volume. The particle-number ratio differs from the lentils' share of total volume because a leaf is much larger than a lentil.</p>
 <h3>Network observables</h3>
 <div class="math-display">\[
 P_\infty(t)=\frac{N_{\mathrm{largest\ connected\ component}}}{N},
@@ -159,7 +166,7 @@ L(s)=L_0\left(\frac{L_f}{L_0}\right)^{3s^2-2s^3},\qquad s\in[0,1].
 <script type="module">
 const $=id=>document.getElementById(id),c=$('scene'),ctx=c.getContext('2d');
 const worker=new Worker('./strips3d-worker.mjs',{type:'module'});
-let topology=null,positions=null,lentilPositions=null,latest=null,history=[],packingHistory=[],relaxedPoint=null,seedCounter=17,currentSeed=17,playing=true;
+let runConfig=null,topology=null,positions=null,lentilPositions=null,latest=null,history=[],packingHistory=[],relaxedPoint=null,seedCounter=17,currentSeed=17,playing=true;
 let az=.83,el=.45,zoom=1,dragging=false,lastPointer=null,pinchDist=null;
 const fields=['strips','length','width','bending','friction','K'];
 const meshSize=()=>$('mesh').value.split('x').map(Number);
@@ -236,7 +243,8 @@ function reset(reuse=false){
  if(!reuse)currentSeed=seedCounter++;
  history=[];packingHistory=[];relaxedPoint=null;latest=null;positions=null;lentilPositions=null;topology=null;plotAll();drawPackingChart();requestDraw();
  $('networkHistory').textContent='Cluster survival: pending preparation.';
- worker.postMessage({cmd:'reset',params:{...options(),seed:currentSeed},autoPlay:playing});
+ runConfig={...options(),seed:currentSeed};
+ worker.postMessage({cmd:'reset',params:runConfig,autoPlay:playing});
  $('message').textContent='Placing every requested strip in a dilute periodic box…';$('phase').textContent='Initializing';$('time').textContent='0.00';
 }
 $('play').onclick=()=>{playing=!playing;worker.postMessage({cmd:playing?'play':'pause'});$('play').textContent=playing?'Pause':'Resume';};
@@ -245,10 +253,32 @@ $('sameSeed').onclick=()=>reset(true);
 $('batch').onchange=()=>worker.postMessage({cmd:'batch',value:+$('batch').value});
 $('view').onclick=()=>{az=.83;el=.45;zoom=1;requestDraw();};
 $('export').onclick=()=>{
- const csv='time,largest_component_fraction,velocity_coherence,interstrip_links,active_contact_mean_age,completed_contact_mean_age,max_penetration\n'+
+ const p=runConfig||options(),vLeaf=p.length*p.width*.16,vLentil=4*Math.PI*.115**3/3;
+ const actual=p.strips*vLeaf+p.lentilCount*vLentil;
+ const meta=[
+  'model,3D_flexible_strips',
+  'seed,'+p.seed,
+  'comparison_mode,'+p.comparisonMode,
+  'reference_leaves,'+p.referenceLeaves,
+  'actual_leaves,'+p.strips,
+  'lentils,'+p.lentilCount,
+  'lentils_per_leaf,'+(p.lentilCount/p.strips),
+  'target_ingredient_volume,'+p.targetIngredientVolume,
+  'actual_ingredient_volume,'+actual,
+  'relative_volume_error,'+(p.targetIngredientVolume?(actual-p.targetIngredientVolume)/p.targetIngredientVolume:0),
+  'box_side,'+p.box,
+  'box_volume,'+p.box**3,
+  'actual_effective_fraction,'+actual/p.box**3,
+  'K,'+p.K,'friction,'+p.friction,'bending,'+p.bending,
+  'leaf_length,'+p.length,'leaf_width,'+p.width,
+  'mesh_cols,'+p.cols,'mesh_rows,'+p.rows,
+  'packing_steps,'+p.packingSteps,'relax_steps,'+p.relaxSteps
+ ];
+ const csv=meta.join('\n')+'\n\n'+
+ 'time,largest_component_fraction,velocity_coherence,interstrip_links,active_contact_mean_age,completed_contact_mean_age,max_penetration\n'+
  history.map(d=>[d.t,d.fraction,d.coherence??'',d.edges,d.meanAge,d.completedAge,d.maxOverlap].join(',')).join('\n');
- const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'})),a=document.createElement('a');
- a.href=url;a.download='3d_strips_network.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'})),link=document.createElement('a');
+ link.href=url;link.download='3d_strips_mixture.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
 worker.onmessage=e=>{
  const m=e.data;
