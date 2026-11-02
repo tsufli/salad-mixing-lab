@@ -200,3 +200,47 @@ test('effective density and compression diagnostics are finite and internally co
  assert.ok(d.packedCluster>=0&&d.packedCluster<=1);
  assert.ok(d.relaxedCluster>=0&&d.relaxedCluster<=1);
 });
+
+test('lentils toggle controls physical sphere population and preserves deterministic seeds',()=>{
+ const off=init3d({strips:7,lentils:false,lentilCount:30,packingSteps:6,relaxSteps:0});
+ const a=init3d({strips:7,lentils:true,lentilCount:30,packingSteps:6,relaxSteps:0});
+ const b=init3d({strips:7,lentils:true,lentilCount:30,packingSteps:6,relaxSteps:0});
+ assert.equal(off.lentils.length,0);
+ assert.equal(a.lentils.length,30);
+ assert.deepEqual(a.lentils.map(x=>x.p),b.lentils.map(x=>x.p));
+ assert.ok(a.lentils.every(x=>x.m>0&&x.r>0));
+ assert.equal(diagnostics3d(off).lentilContacts,0);
+});
+test('lentil-strip interaction transmits two-way contact force and changes dynamics',()=>{
+ const s=init3d({strips:1,lentils:true,lentilCount:1,packing:false,box:7,seed:42,K:0});
+ const face=s.triangles[0],P=face.ids.map(i=>s.vertices[i].p);
+ const q=P.reduce((v,p)=>v.map((x,k)=>x+p[k]/3),[0,0,0]);
+ const u=P[1].map((x,k)=>x-P[0][k]),v=P[2].map((x,k)=>x-P[0][k]);
+ const normal=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
+ const m=Math.hypot(...normal);
+ s.lentils[0].p=q.map((x,k)=>x+normal[k]/m*(s.lentils[0].r+.01));
+ s.lentils[0].v=[0,0,0];
+ step3d(s,1);
+ const d=diagnostics3d(s);
+ assert.ok(d.lentilStripContacts>0,'sphere must contact strip');
+ assert.ok(s.lentils[0].v.some(x=>Math.abs(x)>1e-7),'sphere must receive force');
+});
+test('lentil-lentil contact exerts equal and opposite forces',()=>{
+ const s=init3d({strips:0,lentils:true,lentilCount:2,packing:false,box:7,K:0});
+ s.lentils[0].p=[2,2,2];
+ s.lentils[1].p=[2.16,2,2];
+ s.lentils.forEach(x=>x.v=[0,0,0]);
+ step3d(s,1);
+ assert.ok(diagnostics3d(s).lentilContacts>0);
+ for(let k=0;k<3;k++)
+  assert.ok(Math.abs(s.lentils[0].m*s.lentils[0].v[k]+s.lentils[1].m*s.lentils[1].v[k])<1e-7);
+});
+test('optional lentils are advected and remain finite through all stages',()=>{
+ const s=init3d({strips:8,lentils:true,lentilCount:25,packingSteps:12,relaxSteps:8,seed:31});
+ const initial=s.lentils.map(x=>x.p.slice());
+ step3d(s,26);
+ assert.equal(s.stage,'stirring');
+ assert.equal(s.lentils.length,25);
+ assert.ok(s.lentils.some((x,i)=>x.p.some((v,k)=>Math.abs(v-initial[i][k])>1e-5)));
+ assert.ok(s.lentils.every(x=>x.p.every(Number.isFinite)&&x.v.every(Number.isFinite)));
+});
