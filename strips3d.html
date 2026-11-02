@@ -14,7 +14,7 @@ nav a[aria-current="page"]{color:#0a2318;background:#70b99c;font-weight:700}
 canvas{display:block;width:100%;height:auto;background:#152237;border:1px solid #40516a;border-radius:12px}
 #scene{touch-action:none;cursor:grab}#scene:active{cursor:grabbing}
 aside{background:#19263a;border-radius:12px;padding:16px;align-self:start}
-label{display:block;margin:13px 0;font-size:.9rem}[hidden]{display:none!important}
+label{display:block;margin:13px 0;font-size:.9rem}.check-row{display:flex;align-items:center;gap:10px}.check-row input{width:auto;accent-color:#70b99c;transform:scale(1.2)}[hidden]{display:none!important}
 input,select{width:100%;accent-color:#70b99c}
 select{padding:8px;background:#24374f;color:#e7eef7;border:1px solid #586d82;border-radius:5px}
 button{background:#70b99c;border:0;border-radius:8px;padding:10px 14px;margin:5px 4px 5px 0;font-weight:700;cursor:pointer;color:#0b211a}
@@ -48,6 +48,7 @@ button:hover{filter:brightness(1.07)}
 <div class="stat"><b id="time">0.00</b><small>Stirring time</small></div>
 <div class="stat"><b id="cluster">—</b><small>Largest contact cluster</small></div>
 <div class="stat"><b id="links">0</b><small>Inter-strip contact links</small></div>
+<div class="stat"><b id="lentilStats">Off</b><small>Lentils / strip contacts</small></div>
 <div class="stat"><b id="density">—</b><small>Effective volume fraction</small></div>
 <div class="stat"><b id="penetration">—</b><small>Maximum overlap / thickness</small></div>
 <div class="stat"><b id="throughput">—</b><small>Solver steps / second</small></div>
@@ -57,7 +58,7 @@ button:hover{filter:brightness(1.07)}
 <p class="hint" id="networkHistory">Cluster survival: measured after packing and relaxation.</p>
 <section class="theory" id="model">
 <h2>Model and equations of motion</h2>
-<p>This is an <strong>exploratory 3D discrete elastic-strip model</strong> with no lentils. Each strip is a triangulated rectangular material surface (5 × 2 vertices in the fastest mode, with 5 × 3 and 7 × 3 comparison meshes). Different strips have no permanent bonds. The elastic surface can bend and twist; interpenetration is resisted by finite-thickness, two-sided, soft surface contacts. These are <em>penalty contacts</em>, not an exact guarantee against numerical crossing.</p>
+<p>This is an <strong>exploratory 3D discrete elastic-strip model</strong> with optional freely moving spherical lentils. Each strip is a triangulated rectangular material surface (5 × 2 vertices in the fastest mode, with 5 × 3 and 7 × 3 comparison meshes). Different strips have no permanent bonds. Optional lentils are independently moving finite-mass spheres, with sphere–sphere and sphere–surface repulsive/frictional contacts. The elastic surface can bend and twist; interpenetration is resisted by finite-thickness, two-sided, soft surface contacts. These are <em>penalty contacts</em>, not an exact guarantee against numerical crossing.</p>
 <h3>Elastic strip</h3>
 <div class="math-display">\[
 E_{\mathrm{el}} = E_s+E_b,\qquad
@@ -85,7 +86,7 @@ m_a\ddot{\mathbf r}_a=
 +\sum_{c}\mathbf F_{a,c}^{\mathrm{contact}}
 +\gamma m_a\left[\mathbf u(\mathbf r_a,t)-\dot{\mathbf r}_a\right].
 \]</div>
-<p>Contact forces are distributed to the three vertices of each contacting triangle using barycentric weights. We include inter-strip contact and nonlocal self-contact. Initial configurations are rejected if strips have excessively close surfaces.</p>
+<p>Contact forces are distributed to the three vertices of each contacting triangle using barycentric weights. Lentil–strip contacts likewise transfer equal and opposite forces, and lentil–lentil contacts use the same normal and frictional laws. We include inter-strip contact and nonlocal self-contact. Initial configurations are rejected if strips have excessively close surfaces.</p>
 <h3>Frictional surface contact</h3>
 <div class="math-display">\[
 \begin{aligned}
@@ -98,6 +99,7 @@ F_n&=\max(0,k_n\delta-\eta_n v_n),\\
 \end{aligned}
 \]</div>
 <p>The closest points are calculated using vertex–triangle and edge–edge candidates in 3D, with minimum-image periodicity. Tangential displacement history is stored for each contacting triangle pair and reset on separation. The Coulomb cap allows sliding. This does not introduce artificial adhesion or inter-strip bonds.</p>
+<h3>Optional lentils</h3><p>When the Lentils checkbox is enabled, a separately seeded population of spheres (default 110, radius 0.115) is placed without initial overlap in the dilute box and participates in compression, unforced relaxation and the same stirring field. These are <strong>spherical stand-ins</strong>, not lentil-shaped disks. Lentil–lentil and lentil–strip interactions are two-way contact forces; strips alone still define the leaf-network connectivity observable. Changing the checkbox requires a new run.</p>
 <h3>Network observables</h3>
 <div class="math-display">\[
 P_\infty(t)=\frac{N_{\mathrm{largest\ connected\ component}}}{N},
@@ -131,6 +133,8 @@ L(s)=L_0\left(\frac{L_f}{L_0}\right)^{3s^2-2s^3},\qquad s\in[0,1].
 <div class="toolbar"><button id="play">Pause</button><button id="newRun">New run</button><button id="sameSeed" class="secondary">Restart same seed</button></div>
 <div class="toolbar"><button id="presetLoose" class="secondary">Loose</button><button id="presetDense">Dense</button><button id="presetVeryDense" class="secondary">Very dense</button></div>
 <label>Number of strips <output id="stripsOut"></output><input id="strips" type="range" min="12" max="100" step="4" value="64"></label>
+<label class="check-row"><input type="checkbox" id="lentils"> Include lentils (physical particles)</label>
+<label id="lentilCountRow" hidden>Number of lentils <output id="lentilCountOut">110</output><input id="lentilCount" type="range" min="20" max="200" step="10" value="110"></label>
 <label>Mesh detail<select id="mesh"><option value="5x2" selected>Fast · 5 × 2 vertices</option><option value="5x3">Balanced · 5 × 3 vertices</option><option value="7x3">Detailed · 7 × 3 vertices</option></select></label>
 <label>Strip length <output id="lengthOut"></output><input id="length" type="range" min="2" max="4.6" step=".1" value="3.5"></label>
 <label>Strip width <output id="widthOut"></output><input id="width" type="range" min=".6" max="1.7" step=".1" value="1.2"></label>
@@ -152,7 +156,7 @@ L(s)=L_0\left(\frac{L_f}{L_0}\right)^{3s^2-2s^3},\qquad s\in[0,1].
 <script type="module">
 const $=id=>document.getElementById(id),c=$('scene'),ctx=c.getContext('2d');
 const worker=new Worker('./strips3d-worker.mjs',{type:'module'});
-let topology=null,positions=null,latest=null,history=[],packingHistory=[],relaxedPoint=null,seedCounter=17,currentSeed=17,playing=true;
+let topology=null,positions=null,lentilPositions=null,latest=null,history=[],packingHistory=[],relaxedPoint=null,seedCounter=17,currentSeed=17,playing=true;
 let az=.83,el=.45,zoom=1,dragging=false,lastPointer=null,pinchDist=null;
 const fields=['strips','length','width','bending','friction','K'];
 const meshSize=()=>$('mesh').value.split('x').map(Number);
@@ -162,12 +166,14 @@ function options(){
  const box=$('densityMode').value==='fraction'?
   Math.cbrt(volume/Math.max(.01,+$('densityTarget').value)):+$('box').value;
  return {...Object.fromEntries(fields.map(k=>[k,+$(k).value])),cols,rows,box,
-    packingSteps:+$('packingSteps').value,relaxSteps:+$('relaxSteps').value};
+    packingSteps:+$('packingSteps').value,relaxSteps:+$('relaxSteps').value,lentils:$('lentils').checked,lentilCount:+$('lentilCount').value};
 }
 function updateDensityPreview(){
  for(const key of fields)$(key+'Out').textContent=$(key).value;
  $('densityTargetOut').textContent=(100*(+$('densityTarget').value)).toFixed(0)+'%';
  $('boxOut').textContent=(+$('box').value).toFixed(1);
+ $('lentilCountOut').textContent=$('lentilCount').value;
+ $('lentilCountRow').hidden=!$('lentils').checked;
  $('densityControl').hidden=$('densityMode').value!=='fraction';
  $('boxControl').hidden=$('densityMode').value!=='manual';
  const p=options(),phi=p.strips*p.length*p.width*.16/Math.pow(p.box,3);
@@ -177,7 +183,8 @@ function updateDensityPreview(){
 }
 for(const k of fields)$(k).addEventListener('input',updateDensityPreview);
 for(const id of ['densityTarget','box','mesh','densityMode'])$(id).addEventListener('input',updateDensityPreview);
-for(const id of ['densityMode','mesh'])$(id).addEventListener('change',updateDensityPreview);
+for(const id of ['densityMode','mesh','lentils'])$(id).addEventListener('change',updateDensityPreview);
+$('lentilCount').addEventListener('input',updateDensityPreview);
 updateDensityPreview();
 function preset(N,len,width,phi){
  $('strips').value=N;$('length').value=len;$('width').value=width;
@@ -189,7 +196,7 @@ $('presetDense').onclick=()=>preset(64,3.5,1.2,.18);
 $('presetVeryDense').onclick=()=>preset(88,3.8,1.3,.23);
 function reset(reuse=false){
  if(!reuse)currentSeed=seedCounter++;
- history=[];packingHistory=[];relaxedPoint=null;latest=null;positions=null;topology=null;plotAll();drawPackingChart();requestDraw();
+ history=[];packingHistory=[];relaxedPoint=null;latest=null;positions=null;lentilPositions=null;topology=null;plotAll();drawPackingChart();requestDraw();
  $('networkHistory').textContent='Cluster survival: pending preparation.';
  worker.postMessage({cmd:'reset',params:{...options(),seed:currentSeed},autoPlay:playing});
  $('message').textContent='Placing every requested strip in a dilute periodic box…';$('phase').textContent='Initializing';$('time').textContent='0.00';
@@ -207,9 +214,9 @@ $('export').onclick=()=>{
 };
 worker.onmessage=e=>{
  const m=e.data;
- if(m.type==='topology'){topology=m;latest=m.status;$('message').textContent='3D mesh: '+m.actual+' / '+m.requested+' strips · '+m.vertices+' vertices · '+m.faces+' triangles.';requestDraw();}
+ if(m.type==='topology'){topology=m;latest=m.status;$('message').textContent='3D mesh: '+m.actual+' / '+m.requested+' strips · '+m.vertices+' vertices · '+m.faces+' triangles · '+m.lentils+' lentils.';requestDraw();}
  if(m.type==='frame'){
-  positions=new Float32Array(m.positions);latest=m.status;updateStats();requestDraw();
+  positions=new Float32Array(m.positions);lentilPositions=new Float32Array(m.lentilPositions);latest=m.status;updateStats();requestDraw();
   if(latest.stage==='packing'){
    const last=packingHistory.at(-1);
    if(!last||latest.prepProgress-last.progress>=.025||latest.prepProgress>=1){
@@ -232,6 +239,7 @@ function updateStats(){
  $('time').textContent=latest.t.toFixed(2);
  $('cluster').textContent=(100*latest.fraction).toFixed(0)+'%';
  $('links').textContent=latest.edges;
+ $('lentilStats').textContent=latest.lentils?latest.lentils+' / '+latest.lentilStripContacts:'Off';
  $('coherence').textContent=latest.coherence===null?'—':latest.coherence.toFixed(2);
  $('density').textContent=(100*latest.packingDensity).toFixed(1)+'%';
  const worst=Math.max(latest.maxOverlap,latest.prepMaxOverlap,latest.relaxMaxOverlap)/.16;
@@ -336,20 +344,32 @@ function render(){
   const a=corners[i].raw,b=corners[j].raw;if(a.filter((v,k)=>v!==b[k]).length!==1)continue;
   ctx.beginPath();ctx.moveTo(corners[i].view.x,corners[i].view.y);ctx.lineTo(corners[j].view.x,corners[j].view.y);ctx.stroke();
  }ctx.setLineDash([]);
- const faces=topology.triangles.map(face=>{
+ const objects=topology.triangles.map(face=>{
   const pts=face.ids.map(i=>projected[i]);
-  return{face,pts,depth:(pts[0].depth+pts[1].depth+pts[2].depth)/3};
- }).sort((a,b)=>a.depth-b.depth);
- for(const entry of faces){
-  const {face,pts}=entry;const hue=(145+face.strip*43)%360;
+  return{kind:'face',face,pts,depth:(pts[0].depth+pts[1].depth+pts[2].depth)/3};
+ });
+ if(lentilPositions)for(let i=0;i<lentilPositions.length/3;i++){
+  const point=[lentilPositions[3*i],lentilPositions[3*i+1],lentilPositions[3*i+2]],
+  projectedLentil=project(point,L);
+  objects.push({kind:'lentil',at:projectedLentil,depth:projectedLentil.depth});
+ }
+ objects.sort((a,b)=>a.depth-b.depth);
+ for(const entry of objects){
+  if(entry.kind==='lentil'){
+   const {at}=entry,rad=(topology.lentilRadius||.115)*62*zoom*18/Math.max(5,18-at.depth);
+   ctx.fillStyle='#c58c55';ctx.strokeStyle='#e7bf86';ctx.lineWidth=1;
+   ctx.beginPath();ctx.arc(at.x,at.y,Math.max(2,rad),0,Math.PI*2);ctx.fill();ctx.stroke();
+   continue;
+  }
+  const {face,pts}=entry;
   const a=face.ids[0]*3,b=face.ids[1]*3,d=face.ids[2]*3;
   const u=[positions[b]-positions[a],positions[b+1]-positions[a+1],positions[b+2]-positions[a+2]];
   const v=[positions[d]-positions[a],positions[d+1]-positions[a+1],positions[d+2]-positions[a+2]];
   const n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],mag=Math.hypot(...n)||1;
-  const shade=Math.abs((n[0]*.5+n[1]*.65+n[2]*.55)/mag),light=27+shade*28;
+  const shade=Math.abs((n[0]*.5+n[1]*.65+n[2]*.55)/mag),light=30+shade*23;
   ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);ctx.lineTo(pts[1].x,pts[1].y);ctx.lineTo(pts[2].x,pts[2].y);ctx.closePath();
-  ctx.fillStyle='hsla('+hue+',55%,'+light+'%,0.76)';ctx.fill();
-  ctx.lineWidth=.7;ctx.strokeStyle='hsla('+hue+',65%,83%,.35)';ctx.stroke();
+  ctx.fillStyle='hsla(137,47%,'+light+'%,0.82)';ctx.fill();
+  ctx.lineWidth=.65;ctx.strokeStyle='hsla(135,55%,77%,0.28)';ctx.stroke();
  }
 }
 let drawQueued=false;
